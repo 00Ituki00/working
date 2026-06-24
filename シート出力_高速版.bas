@@ -141,25 +141,24 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     DoEvents
     
     ' === Step 7: 図形をコピー ===
-    ' 元のコードの方式を維持：ActivateとPasteSpecialを使用
+    ' 高速化：Activateを最小限に、DoEventsを削減
+    ToSheet.Activate
+    
     For Each sh In fromsheet.Shapes
         If Not Intersect(Range(sh.TopLeftCell, sh.BottomRightCell), FromRange) Is Nothing Then
             If sh.Type = msoChart Or sh.Type = 17 Or sh.Type = 13 Then
                 On Error GoTo recopy
                 Application.CutCopyMode = False
-                DoEvents
                 sh.Copy
-                DoEvents
-                ToSheet.Activate
-                DoEvents
                 ToSheet.PasteSpecial Format:=0
+                
+                ' 位置調整（直接参照）
+                Dim newShape As Shape
+                Set newShape = ToSheet.Shapes(ToSheet.Shapes.Count)
+                newShape.Top = ToSheet.Range(sh.TopLeftCell.Address).Top
+                newShape.Left = ToSheet.Range(sh.TopLeftCell.Address).Left
+                newShape.SetShapesDefaultProperties
                 On Error GoTo 0
-                DoEvents
-                Application.GoTo ToSheet.Range(sh.TopLeftCell.Address), True
-                ToSheet.Shapes(ToSheet.Shapes.Count).Top = ToSheet.Range(sh.TopLeftCell.Address).Top
-                ToSheet.Shapes(ToSheet.Shapes.Count).Left = ToSheet.Range(sh.TopLeftCell.Address).Left
-                DoEvents
-                ToSheet.Shapes(ToSheet.Shapes.Count).SetShapesDefaultProperties
             End If
         End If
         If ToSheet.Shapes.Count > 0 Then 図形スナップ ToSheet.Shapes(ToSheet.Shapes.Count)
