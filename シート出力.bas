@@ -579,4 +579,216 @@ Sub シートコピー(wb1, wb2, targetRange, targetsheet)
     wb2.Activate
     Sheets(targetsheet).Activate
     Range("A:A").Select
-    Acti
+    ActiveSheet.Paste: DoEvents: Cells(1, 1).Select
+    Cells(1, 1).Select
+End Sub
+Public Sub AddRange(ByRef ranges() As Range, ByVal newRange As Range)
+    Dim count As Long
+
+    On Error GoTo InitArray
+    count = UBound(ranges) + 1
+    ReDim Preserve ranges(count)
+    Set ranges(count) = newRange
+    Exit Sub
+
+InitArray:
+    ReDim ranges(0)
+    Set ranges(0) = newRange
+End Sub
+
+Sub 図形位置のセル合わせ()
+Dim sh As Object
+    For Each sh In ActiveSheet.Shapes
+        図形スナップ sh
+    Next
+End Sub
+
+
+Private Sub 図形スナップ(shp As shape)
+    Dim ws As Worksheet
+    Set ws = shp.Parent
+
+    Dim topLeftCell As Range, bottomRightCell As Range
+    Set topLeftCell = shp.topLeftCell
+    Set bottomRightCell = shp.bottomRightCell
+
+    Dim minRow As Long, maxRow As Long
+    Dim minCol As Long, maxCol As Long
+
+    minRow = Application.max(1, topLeftCell.row - 1)
+    maxRow = Application.min(ws.Rows.count, bottomRightCell.row + 1)
+    minCol = Application.max(1, topLeftCell.Column - 1)
+    maxCol = Application.min(ws.Columns.count, bottomRightCell.Column + 1)
+
+    Dim leftPos As Double, topPos As Double
+    Dim rightPos As Double, bottomPos As Double
+    leftPos = shp.LEFT
+    topPos = shp.Top
+    rightPos = shp.LEFT + shp.Width
+    bottomPos = shp.Top + shp.Height
+
+    Dim nearestLeft As Double, nearestTop As Double
+    Dim nearestRight As Double, nearestBottom As Double
+    Dim minLeftDiff As Double: minLeftDiff = 10000000000#
+    Dim minTopDiff As Double: minTopDiff = 10000000000#
+    Dim minRightDiff As Double: minRightDiff = 10000000000#
+    Dim minBottomDiff As Double: minBottomDiff = 10000000000#
+
+    Dim r As Long, c As Long
+    For r = minRow To maxRow
+        For c = minCol To maxCol
+            With ws.Cells(r, c)
+                ' 左端
+                If Abs(.LEFT - leftPos) < minLeftDiff Then
+                    minLeftDiff = Abs(.LEFT - leftPos)
+                    nearestLeft = .LEFT
+                End If
+                ' 上端
+                If Abs(.Top - topPos) < minTopDiff Then
+                    minTopDiff = Abs(.Top - topPos)
+                    nearestTop = .Top
+                End If
+                ' 右端
+                If Abs(.LEFT + .Width - rightPos) < minRightDiff Then
+                    minRightDiff = Abs(.LEFT + .Width - rightPos)
+                    nearestRight = .LEFT + .Width
+                End If
+                ' 下端
+                If Abs(.Top + .Height - bottomPos) < minBottomDiff Then
+                    minBottomDiff = Abs(.Top + .Height - bottomPos)
+                    nearestBottom = .Top + .Height
+                End If
+            End With
+        Next c
+    Next r
+
+    ' 図形の位置とサイズを更新
+    With shp
+        .LockAspectRatio = False
+        .LEFT = nearestLeft
+        .Top = nearestTop
+        .Width = nearestRight - nearestLeft
+        .Height = nearestBottom - nearestTop
+    End With
+End Sub
+
+
+
+Function GetSlicer(name) As SlicerCache
+    Dim slcCache As SlicerCache
+    Dim slc As slicer
+    Dim isSlicerFound As Boolean
+
+    isSlicerFound = False
+    ' ワークブック内の全スライサーキャッシュを走査
+    DoEvents
+    On Error GoTo re
+    For Each slcCache In ActiveWorkbook.SlicerCaches
+        ' 各スライサーキャッシュに含まれるスライサーを確認
+        For Each slc In slcCache.Slicers
+re:
+            If slc.shape.Parent Is ActiveSheet Then
+                If Split(slc.Caption, " ")(0) = Split(name, " ")(0) Then
+
+                    Set GetSlicer = slc.SlicerCache
+                    Exit Function
+                End If
+            End If
+        Next slc
+    Next slcCache
+
+    If Not isSlicerFound Then
+        MsgBox "指定されたスライサーは見つかりませんでした。"
+    End If
+End Function
+
+
+Sub ExMerge(firstRow, Scanname, Targetname)
+'項目のマージ状態を他の項目列へ反映
+lastRow = Cells(Rows.count, 1).End(xlUp).row
+lastcolumn = Cells(firstRow, Columns.count).End(xlToLeft).Column
+'参照項目の位置を取得
+    For c = 1 To lastcolumn
+        If Cells(firstRow, c) = Scanname Then ScanCol = c: Exit For
+    Next c
+    Application.DisplayAlerts = False
+    Application.ScreenUpdating = False
+    For c = 1 To lastcolumn
+        For r = firstRow To lastRow
+            '項目名がTargetnameと一致した場合
+            If Cells(firstRow, c).value = Targetname Then
+                'scancolのマージ状態をc列に反映
+                mergecount = Cells(r, ScanCol).MergeArea.Rows.count
+                If mergecount <> 1 Then
+                    Cells(r, c).Resize(mergecount, 1).Merge
+                    r = r + mergecount - 1
+                End If
+                Cells(r, c).HorizontalAlignment = xlCenter
+                Cells(r, c).VerticalAlignment = xlCenter
+            End If
+        Next r
+        DoEvents
+    Next c
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+
+End Sub
+Sub MergeBook(wb1 As Workbook, wb2 As Workbook)
+    wb2.Worksheets(1).Move After:=wb1.Worksheets(1)
+    wb1.Worksheets(1).Activate
+    wb1.Save
+    wb1.Close
+End Sub
+
+Public Sub MakeDir(outdir)
+Dim dirpath As String
+dirpath = outdir
+
+    '保存先フォルダが存在しない場合は再帰的に作成
+    If Dir(dirpath, vbDirectory) = "" Then
+        '再帰的にフォルダを作成する
+        Dim parentPath As String
+        parentPath = LEFT(dirpath, InStrRev(dirpath, "\") - 1)
+        If Dir(parentPath, vbDirectory) = "" Then
+            '親フォルダが存在しない場合は再帰的に作成
+            Do
+                parentPath = LEFT(parentPath, InStrRev(parentPath, "\") - 1)
+                If Dir(parentPath, vbDirectory) <> "" Then Exit Do
+            Loop
+            '親フォルダを作成
+            Do
+                'parentPath = parentPath & "\"
+
+                If Dir(parentPath, vbDirectory) = "" Then MkDir Replace(parentPath, "\\", "\")
+                On Error GoTo out
+                parentPath = parentPath & Mid(dirpath, Len(parentPath) + 1, InStr(Len(parentPath) + 1, dirpath, "\") - Len(parentPath))
+            Loop Until Len(parentPath) >= Len(dirpath)
+out:
+        End If
+        dirpath = Replace(dirpath, "\\", "\")
+        If Dir(dirpath, vbDirectory) = "" Then MkDir dirpath
+    End If
+    DoEvents
+End Sub
+
+Sub フィルタ解除(sliname As String)
+    Set sli2 = GetSlicer(sliname) '
+    If sli2.FilterCleared = False Then sli2.ClearManualFilter
+End Sub
+Sub フィルタ設定(sliname As String, sli_select)
+    Set sli = GetSlicer(sliname) '対象スライサーを検索
+    For Each Items In sli.VisibleSlicerItemsList
+        If Items = sli_select Then Exit Sub
+    Next
+    sli.VisibleSlicerItemsList = Array(sli_select)
+
+End Sub
+Sub ResetMaked()
+On Error Resume Next
+STVBA
+    For Each Item In maked
+        Item.Close
+    Next
+    Set maked = Nothing
+    RFVBA
+End Sub
