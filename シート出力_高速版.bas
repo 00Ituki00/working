@@ -13,7 +13,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     Dim dataArr As Variant
     Dim fmtArr() As Variant
     Dim colorArr() As Variant
-    Dim borderArr() As Variant
+    Dim borderArr() As String
     Dim r As Long, c As Long
     Dim firstRow As Long, lastRow As Long
     Dim tempPath As String
