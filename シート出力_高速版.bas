@@ -142,6 +142,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     
     ' === Step 7: 図形を画像としてコピー ===
     Dim imgIndex As Long: imgIndex = 0
+    Dim insertedShape As Shape
     
     ' グラフ（ChartObjects）を画像化
     For Each chartObj In fromsheet.ChartObjects
@@ -152,35 +153,40 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
             chartFile = tempPath & "chart_" & imgIndex & ".png"
             chartObj.Chart.Export Filename:=chartFile, FilterName:="PNG"
             
-            ' 出力先に画像として挿入
-            ToSheet.Activate
-            ToSheet.Pictures.Insert(chartFile).Select
-            With ToSheet.Shapes(ToSheet.Shapes.Count)
+            ' 出力先に画像として挿入（Selectを使わず直接参照）
+            Set insertedShape = ToSheet.Pictures.Insert(chartFile)
+            With insertedShape
                 .Top = ToSheet.Range(chartObj.TopLeftCell.Address).Top
                 .Left = ToSheet.Range(chartObj.TopLeftCell.Address).Left
                 .Width = chartObj.Width
                 .Height = chartObj.Height
             End With
             
-            ' 一時ファイル削除
-            Kill chartFile
+            ' 一時ファイル削除（エラーチェック付き）
+            If Dir(chartFile) <> "" Then
+                Kill chartFile
+            End If
             On Error GoTo 0
         End If
     Next chartObj
     DoEvents
     
-    ' その他の図形
+    ' その他の図形（ChartObjects以外）
     For Each sh In fromsheet.Shapes
         If Not Intersect(Range(sh.TopLeftCell, sh.BottomRightCell), FromRange) Is Nothing Then
+            ' ChartObjectsは既に処理済みなのでスキップ
             If sh.Type <> msoChart And sh.Type <> 17 Then
                 On Error Resume Next
                 imgIndex = imgIndex + 1
                 Dim shapeFile As String
                 shapeFile = tempPath & "shape_" & imgIndex & ".png"
                 
+                ' 図形を直接コピー（ファイル経由ではなく）
                 sh.Copy
                 ToSheet.Paste
-                With ToSheet.Shapes(ToSheet.Shapes.Count)
+                ' 貼り付けられた図形を直接参照（最後の図形ではなく）
+                Set insertedShape = ToSheet.Shapes(ToSheet.Shapes.Count)
+                With insertedShape
                     .Top = ToSheet.Range(sh.TopLeftCell.Address).Top
                     .Left = ToSheet.Range(sh.TopLeftCell.Address).Left
                 End With
