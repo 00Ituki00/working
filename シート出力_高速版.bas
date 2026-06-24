@@ -20,23 +20,27 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     ToBook.ApplyTheme "C:\Users\h_ikegami\AppData\Roaming\Microsoft\Templates\Document Themes\default.thmx"
     DoEvents
     
-    ' === Step 1: ピボットテーブルを値化 ===
-    ' ピボットテーブルのスタイルを実書式として保持するため、範囲を保存
-    Dim ptRanges As Collection
-    Set ptRanges = New Collection
-    
+    ' === Step 1: ピボットテーブルを個別にコピー ===
+    ' ピボットテーブルの書式を正確に再現するため、個別にコピー
     For Each pt In fromsheet.PivotTables
         If Not Intersect(pt.TableRange2, FromRange) Is Nothing Then
             On Error Resume Next
-            ' ピボットテーブル範囲を保存（後で個別にコピー）
+            ' ピボットテーブルのデータ範囲をコピー
+            Dim ptRange As Range
             If pt.ShowValuesRow Then
-                ptRanges.Add pt.TableRange1.Offset(1, 0).Resize(pt.TableRange1.Rows.Count - 1)
+                Set ptRange = pt.TableRange1.Offset(1, 0).Resize(pt.TableRange1.Rows.Count - 1)
             Else
-                ptRanges.Add pt.TableRange1
+                Set ptRange = pt.TableRange1
             End If
-            ' ページフィールドも保存
+            ' 値と書式をコピー
+            ptRange.Copy
+            ToSheet.Cells(ptRange.Cells(1, 1).Row, ptRange.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteValuesAndNumberFormats
+            ToSheet.Cells(ptRange.Cells(1, 1).Row, ptRange.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteFormats
+            ' ページフィールドもコピー
             If pt.PageFields.Count > 0 Then
-                ptRanges.Add pt.PageRange
+                pt.PageRange.Copy
+                ToSheet.Cells(pt.PageRange.Cells(1, 1).Row, pt.PageRange.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteValuesAndNumberFormats
+                ToSheet.Cells(pt.PageRange.Cells(1, 1).Row, pt.PageRange.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteFormats
             End If
             On Error GoTo 0
         End If
@@ -89,18 +93,18 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     On Error GoTo 0
     DoEvents
     
-    ' === Step 5.5: テーブルとピボットテーブルのスタイルを個別にコピー ===
-    ' テーブル/ピボットテーブル範囲は通常セルとしてコピーすることで、スタイルを実書式として適用
+    ' === Step 5.5: テーブルのスタイルを個別にコピー ===
+    ' テーブル範囲は通常セルとしてコピーすることで、テーブルスタイルを実書式として適用
     Dim tblRange As Range
     For Each tblRange In tblRanges
         On Error Resume Next
-        ' 範囲をコピー（テーブル/ピボット構造は維持せず、表示書式のみ）
+        ' 範囲をコピー（テーブル構造は維持せず、表示書式のみ）
         tblRange.Copy
         ' 貼り付け先を計算
         Dim tblDestRange As Range
         Set tblDestRange = ToSheet.Range(tblRange.Address)
         tblDestRange.PasteSpecial Paste:=xlPasteAllUsingSourceTheme
-        ' 値は上書き（テーブル/ピボット構造を排除）
+        ' 値は上書き（テーブル構造を排除）
         tblDestRange.Value = tblDestRange.Value
         On Error GoTo 0
     Next tblRange
