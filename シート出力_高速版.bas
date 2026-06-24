@@ -1,6 +1,5 @@
 ' シート出力高速化版
-' ピボットテーブル・テーブルを事前に値化し、配列一括処理で高速化
-' 書式（値書式、セル色、罫線）を正確に再現
+' ハイブリッド方式：データは配列一括、書式はPasteSpecial
 
 Global maked As New Collection
 
@@ -11,11 +10,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     Dim sh As Shape
     Dim chartObj As ChartObject
     Dim dataArr As Variant
-    Dim fmtArr() As Variant
-    Dim colorArr() As Variant
-    Dim borderArr() As String
     Dim r As Long, c As Long
-    Dim firstRow As Long, lastRow As Long
     Dim tempPath As String
     
     STVBA
@@ -29,7 +24,6 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     For Each pt In fromsheet.PivotTables
         If Not Intersect(pt.TableRange2, FromRange) Is Nothing Then
             On Error Resume Next
-            ' ピボットテーブルを値化（データ本体のみ）
             Dim ptDataRange As Range
             If pt.ShowValuesRow Then
                 Set ptDataRange = pt.TableRange1.Offset(1, 0).Resize(pt.TableRange1.Rows.Count - 1)
@@ -57,28 +51,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     Next lo
     DoEvents
     
-    ' === Step 3: 書式情報を事前収集 ===
-    firstRow = FromRange.Row
-    lastRow = FromRange.Row + FromRange.Rows.Count - 1
-    
-    ' 列書式、セル色、罫線を保存
-    ReDim fmtArr(1 To FromRange.Rows.Count, 1 To FromRange.Columns.Count)
-    ReDim colorArr(1 To FromRange.Rows.Count, 1 To FromRange.Columns.Count)
-    ReDim borderArr(1 To FromRange.Rows.Count, 1 To FromRange.Columns.Count)
-    
-    For r = 1 To FromRange.Rows.Count
-        For c = 1 To FromRange.Columns.Count
-            Dim srcCell As Range
-            Set srcCell = fromsheet.Cells(firstRow + r - 1, FromRange.Column + c - 1)
-            fmtArr(r, c) = srcCell.NumberFormat
-            colorArr(r, c) = srcCell.Interior.Color
-            ' 罫線情報を文字列として保存
-            borderArr(r, c) = GetBorderKey(srcCell)
-        Next c
-    Next r
-    DoEvents
-    
-    ' === Step 4: セルデータを配列で一括コピー ===
+    ' === Step 3: データを配列で一括コピー ===
     dataArr = FromRange.Value2
     
     ' 配列内で空白処理
@@ -91,7 +64,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     Next r
     DoEvents
     
-    ' === Step 5: 一括書き込み ===
+    ' === Step 4: 一括書き込み ===
     Dim ToRange As Range
     Set ToRange = ToSheet.Range(ToSheet.Cells(FromRange.Row, FromRange.Column), _
                                 ToSheet.Cells(FromRange.Row + FromRange.Rows.Count - 1, _
@@ -102,28 +75,18 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     ToRange.Value2 = dataArr
     DoEvents
     
-    ' === Step 6: 書式を個別適用 ===
-    For r = 1 To FromRange.Rows.Count
-        For c = 1 To FromRange.Columns.Count
-            Dim dstCell As Range
-            Set dstCell = ToSheet.Cells(FromRange.Row + r - 1, FromRange.Column + c - 1)
-            ' 値書式
-            dstCell.NumberFormat = fmtArr(r, c)
-            ' セル色
-            If colorArr(r, c) <> 16777215 Then ' 白色以外
-                dstCell.Interior.Color = colorArr(r, c)
-            End If
-            ' 罫線
-            ApplyBorderKey dstCell, borderArr(r, c)
-        Next c
-    Next r
+    ' === Step 5: 書式をPasteSpecialで一括適用 ===
+    On Error GoTo recopy1
+    fromsheet.Activate: FromRange.Copy: ToSheet.Activate
+    ToRange.PasteSpecial Paste:=xlPasteFormats
+    On Error GoTo 0
     DoEvents
     
-    ' === Step 7: 条件書式を正規化 ===
+    ' === Step 6: 条件書式を正規化 ===
     書式を正規化 ToRange
     DoEvents
     
-    ' === Step 8: 図形を画像としてコピー ===
+    ' === Step 7: 図形を画像としてコピー ===
     Dim imgIndex As Long: imgIndex = 0
     
     ' グラフ（ChartObjects）を画像化
@@ -173,7 +136,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     Next sh
     DoEvents
     
-    ' === Step 9: ウィンドウ設定のコピー ===
+    ' === Step 8: ウィンドウ設定のコピー ===
     ToSheet.Activate
     ToSheet.Cells(1).Select
     ToSheet.Parent.Windows(1).Zoom = fromsheet.Parent.Windows(1).Zoom
@@ -185,7 +148,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     End If
     DoEvents
     
-    ' === Step 10: 名前定義をコピー ===
+    ' === Step 9: 名前定義をコピー ===
     On Error Resume Next
     Dim n As Name, nr As Range, ton As Name
     For Each n In FromBook.Names
@@ -205,7 +168,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     On Error GoTo 0
     DoEvents
     
-    ' === Step 11: 選択範囲外の削除 ===
+    ' === Step 10: 選択範囲外の削除 ===
     If selectiononly Then
         If FromRange.Column + FromRange.Columns.Count <= ToSheet.Columns.Count Then
             ToSheet.Range(ToSheet.Cells(1, FromRange.Column + FromRange.Columns.Count), _
@@ -229,51 +192,11 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     RFVBA
     
     Set 切り出し高速 = ToBook
-End Function
-
-' === 罫線情報を文字列として取得 ===
-Private Function GetBorderKey(cell As Range) As String
-    Dim key As String
-    Dim b As Variant
-    Dim borderTypes As Variant
-    borderTypes = Array(xlEdgeTop, xlEdgeBottom, xlEdgeLeft, xlEdgeRight, xlInsideHorizontal, xlInsideVertical)
+    Exit Function
     
-    For Each b In borderTypes
-        With cell.Borders(b)
-            key = key & b & ":" & .LineStyle & "," & .Color & "," & .Weight & ";"
-        End With
-    Next b
-    GetBorderKey = key
+recopy1:
+    fromsheet.Activate: FromRange.Copy: ToSheet.Activate: DoEvents: Resume
 End Function
-
-' === 罫線情報を適用 ===
-Private Sub ApplyBorderKey(cell As Range, key As String)
-    Dim parts() As String
-    Dim i As Long
-    Dim borderTypes As Variant
-    borderTypes = Array(xlEdgeTop, xlEdgeBottom, xlEdgeLeft, xlEdgeRight, xlInsideHorizontal, xlInsideVertical)
-    
-    parts = Split(key, ";")
-    On Error Resume Next
-    For i = 0 To 5
-        If parts(i) <> "" Then
-            Dim vals() As String
-            vals = Split(parts(i), ":")
-            If UBound(vals) >= 1 Then
-                Dim borderVals() As String
-                borderVals = Split(vals(1), ",")
-                With cell.Borders(borderTypes(i))
-                    If CLng(borderVals(0)) <> -4142 Then
-                        .LineStyle = CLng(borderVals(0))
-                        .Color = CLng(borderVals(1))
-                        .Weight = CLng(borderVals(2))
-                    End If
-                End With
-            End If
-        End If
-    Next i
-    On Error GoTo 0
-End Sub
 
 ' === 既存のインターフェースを維持 ===
 Public Function 切り出し(FromBook As Workbook, fromsheet As Worksheet, FromRange As Range, ToBook As Workbook, ToSheet As Worksheet, Optional selectiononly = False, Optional fitpage = False) As Workbook
