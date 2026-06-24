@@ -21,23 +21,30 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     DoEvents
     
     ' === Step 1: ピボットテーブルの範囲を保存（後で上書き）===
+    ' 指定されたFromRange内の範囲のみ対象とする
     Dim ptRanges As Collection
     Set ptRanges = New Collection
     
     For Each pt In fromsheet.PivotTables
         If Not Intersect(pt.TableRange2, FromRange) Is Nothing Then
             On Error Resume Next
-            ' ピボットテーブルのデータ範囲を保存
+            ' ピボットテーブルのデータ範囲を保存（FromRangeとの共通部分のみ）
             Dim ptRange As Range
             If pt.ShowValuesRow Then
-                Set ptRange = pt.TableRange1.Offset(1, 0).Resize(pt.TableRange1.Rows.Count - 1)
+                Set ptRange = Intersect(pt.TableRange1.Offset(1, 0).Resize(pt.TableRange1.Rows.Count - 1), FromRange)
             Else
-                Set ptRange = pt.TableRange1
+                Set ptRange = Intersect(pt.TableRange1, FromRange)
             End If
-            ptRanges.Add ptRange
-            ' ページフィールドも保存
+            If Not ptRange Is Nothing Then
+                ptRanges.Add ptRange
+            End If
+            ' ページフィールドも保存（FromRangeとの共通部分のみ）
             If pt.PageFields.Count > 0 Then
-                ptRanges.Add pt.PageRange
+                Dim ptPageRange As Range
+                Set ptPageRange = Intersect(pt.PageRange, FromRange)
+                If Not ptPageRange Is Nothing Then
+                    ptRanges.Add ptPageRange
+                End If
             End If
             On Error GoTo 0
         End If
