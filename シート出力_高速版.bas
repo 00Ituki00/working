@@ -42,10 +42,15 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     DoEvents
     
     ' === Step 2: テーブル（リストオブジェクト）を値化 ===
+    ' テーブルのスタイルを実書式として保持するため、テーブル構造は維持せず値のみをコピー
+    Dim tblRanges As Collection
+    Set tblRanges = New Collection
+    
     For Each lo In fromsheet.ListObjects
         If Not Intersect(lo.Range, FromRange) Is Nothing Then
             On Error Resume Next
-            lo.Range.Value = lo.Range.Value
+            ' テーブル範囲を保存（後で個別にコピー）
+            tblRanges.Add lo.Range
             On Error GoTo 0
         End If
     Next lo
@@ -80,6 +85,23 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     fromsheet.Activate: FromRange.Copy: ToSheet.Activate
     ToRange.PasteSpecial Paste:=xlPasteFormats
     On Error GoTo 0
+    DoEvents
+    
+    ' === Step 5.5: テーブルのスタイルを個別にコピー ===
+    ' テーブル範囲は通常セルとしてコピーすることで、テーブルスタイルを実書式として適用
+    Dim tblRange As Range
+    For Each tblRange In tblRanges
+        On Error Resume Next
+        ' テーブル範囲をコピー（テーブル構造は維持せず、表示書式のみ）
+        tblRange.Copy
+        ' 貼り付け先を計算
+        Dim tblDestRange As Range
+        Set tblDestRange = ToSheet.Range(tblRange.Address)
+        tblDestRange.PasteSpecial Paste:=xlPasteAllUsingSourceTheme
+        ' 値は上書き（テーブル構造を排除）
+        tblDestRange.Value = tblDestRange.Value
+        On Error GoTo 0
+    Next tblRange
     DoEvents
     
     ' === Step 6: 条件書式を正規化 ===
