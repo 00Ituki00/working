@@ -140,59 +140,29 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     書式を正規化 ToRange
     DoEvents
     
-    ' === Step 7: 図形を画像としてコピー ===
-    Dim imgIndex As Long: imgIndex = 0
-    Dim insertedShape As Shape
-    
-    ' グラフ（ChartObjects）を画像化
-    For Each chartObj In fromsheet.ChartObjects
-        If Not Intersect(Range(chartObj.TopLeftCell, chartObj.BottomRightCell), FromRange) Is Nothing Then
-            On Error Resume Next
-            imgIndex = imgIndex + 1
-            Dim chartFile As String
-            chartFile = tempPath & "chart_" & imgIndex & ".png"
-            chartObj.Chart.Export Filename:=chartFile, FilterName:="PNG"
-            
-            ' 出力先に画像として挿入（Selectを使わず直接参照）
-            Set insertedShape = ToSheet.Pictures.Insert(chartFile)
-            With insertedShape
-                .Top = ToSheet.Range(chartObj.TopLeftCell.Address).Top
-                .Left = ToSheet.Range(chartObj.TopLeftCell.Address).Left
-                .Width = chartObj.Width
-                .Height = chartObj.Height
-            End With
-            
-            ' 一時ファイル削除（エラーチェック付き）
-            If Dir(chartFile) <> "" Then
-                Kill chartFile
-            End If
-            On Error GoTo 0
-        End If
-    Next chartObj
-    DoEvents
-    
-    ' その他の図形（ChartObjects以外）
+    ' === Step 7: 図形をコピー ===
+    ' 元のコードの方式を維持：ActivateとPasteSpecialを使用
     For Each sh In fromsheet.Shapes
         If Not Intersect(Range(sh.TopLeftCell, sh.BottomRightCell), FromRange) Is Nothing Then
-            ' ChartObjectsは既に処理済みなのでスキップ
-            If sh.Type <> msoChart And sh.Type <> 17 Then
-                On Error Resume Next
-                imgIndex = imgIndex + 1
-                Dim shapeFile As String
-                shapeFile = tempPath & "shape_" & imgIndex & ".png"
-                
-                ' 図形を直接コピー（ファイル経由ではなく）
+            If sh.Type = msoChart Or sh.Type = 17 Or sh.Type = 13 Then
+                On Error GoTo recopy
+                Application.CutCopyMode = False
+                DoEvents
                 sh.Copy
-                ToSheet.Paste
-                ' 貼り付けられた図形を直接参照（最後の図形ではなく）
-                Set insertedShape = ToSheet.Shapes(ToSheet.Shapes.Count)
-                With insertedShape
-                    .Top = ToSheet.Range(sh.TopLeftCell.Address).Top
-                    .Left = ToSheet.Range(sh.TopLeftCell.Address).Left
-                End With
+                DoEvents
+                ToSheet.Activate
+                DoEvents
+                ToSheet.PasteSpecial Format:=0
                 On Error GoTo 0
+                DoEvents
+                Application.GoTo ToSheet.Range(sh.TopLeftCell.Address), True
+                ToSheet.Shapes(ToSheet.Shapes.Count).Top = ToSheet.Range(sh.TopLeftCell.Address).Top
+                ToSheet.Shapes(ToSheet.Shapes.Count).Left = ToSheet.Range(sh.TopLeftCell.Address).Left
+                DoEvents
+                ToSheet.Shapes(ToSheet.Shapes.Count).SetShapesDefaultProperties
             End If
         End If
+        If ToSheet.Shapes.Count > 0 Then 図形スナップ ToSheet.Shapes(ToSheet.Shapes.Count)
     Next sh
     DoEvents
     
