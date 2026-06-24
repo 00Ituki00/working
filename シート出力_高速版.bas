@@ -20,6 +20,15 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     ToBook.ApplyTheme "C:\Users\h_ikegami\AppData\Roaming\Microsoft\Templates\Document Themes\default.thmx"
     DoEvents
     
+    ' === Step 0: FromRangeをUsedRangeで絞る ===
+    ' 指定範囲がシートの使用範囲を超えている場合は制限
+    Dim usedRng As Range
+    Set usedRng = fromsheet.UsedRange
+    If Not Intersect(FromRange, usedRng) Is Nothing Then
+        Set FromRange = Intersect(FromRange, usedRng)
+    End If
+    DoEvents
+    
     ' === Step 1: ピボットテーブルの範囲を保存（後で上書き）===
     ' 指定されたFromRange内の範囲のみ対象とする
     Dim ptRanges As Collection
@@ -99,6 +108,13 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     fromsheet.Activate: FromRange.Copy: ToSheet.Activate
     ToRange.PasteSpecial Paste:=xlPasteFormats
     On Error GoTo 0
+    DoEvents
+    
+    ' === Step 5.5: 列幅をコピー ===
+    Dim col As Long
+    For col = FromRange.Column To FromRange.Column + FromRange.Columns.Count - 1
+        ToSheet.Columns(col).ColumnWidth = fromsheet.Columns(col).ColumnWidth
+    Next col
     DoEvents
     
     ' === Step 6: ピボットテーブルを上書きコピー ===
