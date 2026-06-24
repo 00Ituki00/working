@@ -53,11 +53,6 @@ Public Function 切り出し軽量(FromBook As Workbook, fromsheet As Worksheet,
     
     ' === Step 3: データを配列で一括コピー ===
     dataArr = FromRange.Value2
-    For r = 1 To UBound(dataArr, 1)
-        For c = 1 To UBound(dataArr, 2)
-            If IsEmpty(dataArr(r, c)) Or IsError(dataArr(r, c)) Then dataArr(r, c) = ""
-        Next c
-    Next r
     
     ' === Step 4: 一括書き込み ===
     Dim ToRange As Range
