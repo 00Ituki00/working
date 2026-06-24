@@ -224,6 +224,8 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     Set 切り出し高速 = ToBook
     Exit Function
     
+recopy:
+    DoEvents: Resume
 recopy1:
     fromsheet.Activate: FromRange.Copy: ToSheet.Activate: DoEvents: Resume
 End Function
