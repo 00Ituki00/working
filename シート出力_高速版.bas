@@ -21,20 +21,22 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     DoEvents
     
     ' === Step 1: ピボットテーブルを値化 ===
+    ' ピボットテーブルのスタイルを実書式として保持するため、範囲を保存
+    Dim ptRanges As Collection
+    Set ptRanges = New Collection
+    
     For Each pt In fromsheet.PivotTables
         If Not Intersect(pt.TableRange2, FromRange) Is Nothing Then
             On Error Resume Next
-            Dim ptDataRange As Range
+            ' ピボットテーブル範囲を保存（後で個別にコピー）
             If pt.ShowValuesRow Then
-                Set ptDataRange = pt.TableRange1.Offset(1, 0).Resize(pt.TableRange1.Rows.Count - 1)
+                ptRanges.Add pt.TableRange1.Offset(1, 0).Resize(pt.TableRange1.Rows.Count - 1)
             Else
-                Set ptDataRange = pt.TableRange1
+                ptRanges.Add pt.TableRange1
             End If
-            ' 値を上書き（ピボット機能を失わせる）
-            ptDataRange.Value = ptDataRange.Value
-            ' ページフィールドも値化
+            ' ページフィールドも保存
             If pt.PageFields.Count > 0 Then
-                pt.PageRange.Value = pt.PageRange.Value
+                ptRanges.Add pt.PageRange
             End If
             On Error GoTo 0
         End If
@@ -87,18 +89,18 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     On Error GoTo 0
     DoEvents
     
-    ' === Step 5.5: テーブルのスタイルを個別にコピー ===
-    ' テーブル範囲は通常セルとしてコピーすることで、テーブルスタイルを実書式として適用
+    ' === Step 5.5: テーブルとピボットテーブルのスタイルを個別にコピー ===
+    ' テーブル/ピボットテーブル範囲は通常セルとしてコピーすることで、スタイルを実書式として適用
     Dim tblRange As Range
     For Each tblRange In tblRanges
         On Error Resume Next
-        ' テーブル範囲をコピー（テーブル構造は維持せず、表示書式のみ）
+        ' 範囲をコピー（テーブル/ピボット構造は維持せず、表示書式のみ）
         tblRange.Copy
         ' 貼り付け先を計算
         Dim tblDestRange As Range
         Set tblDestRange = ToSheet.Range(tblRange.Address)
         tblDestRange.PasteSpecial Paste:=xlPasteAllUsingSourceTheme
-        ' 値は上書き（テーブル構造を排除）
+        ' 値は上書き（テーブル/ピボット構造を排除）
         tblDestRange.Value = tblDestRange.Value
         On Error GoTo 0
     Next tblRange
