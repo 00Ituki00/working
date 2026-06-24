@@ -52,8 +52,12 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     For Each lo In fromsheet.ListObjects
         If Not Intersect(lo.Range, FromRange) Is Nothing Then
             On Error Resume Next
-            ' テーブル範囲を保存（後で個別にコピー）
-            tblRanges.Add lo.Range
+            ' テーブル範囲とFromRangeの共通部分を保存
+            Dim loIntersect As Range
+            Set loIntersect = Intersect(lo.Range, FromRange)
+            If Not loIntersect Is Nothing Then
+                tblRanges.Add loIntersect
+            End If
             On Error GoTo 0
         End If
     Next lo
@@ -92,13 +96,19 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     
     ' === Step 6: ピボットテーブルを上書きコピー ===
     ' 通常セルのコピー後に、ピボットテーブル範囲を上書き
+    ' ただし、指定されたFromRange内の範囲のみ対象とする
     Dim ptItem As Range
     For Each ptItem In ptRanges
         On Error Resume Next
-        ' 値と書式をコピー（2段階）
-        ptItem.Copy
-        ToSheet.Cells(ptItem.Cells(1, 1).Row, ptItem.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteValuesAndNumberFormats
-        ToSheet.Cells(ptItem.Cells(1, 1).Row, ptItem.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteFormats
+        ' ピボットテーブル範囲とFromRangeの共通部分を計算
+        Dim ptIntersect As Range
+        Set ptIntersect = Intersect(ptItem, FromRange)
+        If Not ptIntersect Is Nothing Then
+            ' 共通部分のみをコピー
+            ptIntersect.Copy
+            ToSheet.Cells(ptIntersect.Cells(1, 1).Row, ptIntersect.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteValuesAndNumberFormats
+            ToSheet.Cells(ptIntersect.Cells(1, 1).Row, ptIntersect.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteFormats
+        End If
         On Error GoTo 0
     Next ptItem
     DoEvents
