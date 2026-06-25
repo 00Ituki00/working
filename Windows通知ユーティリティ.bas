@@ -1,11 +1,9 @@
-' Windows通知ユーティリティ v3
+' Windows通知ユーティリティ v4
 ' PowerShell経由でWindowsトレイ通知（バルーン通知）を表示
 ' 修正履歴:
 '   v2: スクリプトファイル方式に変更
 '   v3: PowerShellウィンドウが表示される問題を修正
-'       - WScript.Shell.Run から Shell.Application へ変更
-'       - 同期的実行でエラーをキャッチ
-'       - フォールバック方法を追加
+'   v4: Add-Typeの問題を修正、確実な通知表示を実現
 
 ' === 通知表示関数 ===
 ' 引数:
@@ -40,32 +38,24 @@ Public Sub ShowToast(ByVal Title As String, ByVal Message As String, _
     fileNum = FreeFile
     
     Open scriptPath For Output As #fileNum
-    Print #fileNum, "Add-Type -AssemblyName System.Windows.Forms"
+    Print #fileNum, "Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop"
+    Print #fileNum, "Add-Type -AssemblyName System.Drawing -ErrorAction Stop"
     Print #fileNum, "$notify = New-Object System.Windows.Forms.NotifyIcon"
     Print #fileNum, "$notify.Icon = [System.Drawing.SystemIcons]::" & psIcon
     Print #fileNum, "$notify.Visible = $true"
+    Print #fileNum, "$notify.Text = '" & EscapeForPowerShell(Title) & "'"
     Print #fileNum, "$notify.ShowBalloonTip(" & Duration & ", '" & EscapeForPowerShell(Title) & "', '" & EscapeForPowerShell(Message) & "', [System.Windows.Forms.ToolTipIcon]::" & psIcon & ")"
     Print #fileNum, "Start-Sleep -Seconds " & Duration + 2
+    Print #fileNum, "$notify.Visible = $false"
     Print #fileNum, "$notify.Dispose()"
     Close #fileNum
     
-    ' 方法1: Shell.Application を使用（ウィンドウを表示しない）
-    On Error Resume Next
+    ' Shell.Application を使用してウィンドウを非表示
     Dim shellApp As Object
     Set shellApp = CreateObject("Shell.Application")
     shellApp.ShellExecute "powershell.exe", "-ExecutionPolicy Bypass -WindowStyle Hidden -File """ & scriptPath & """"", "", "open", 0
-    
-    If Err.Number <> 0 Then
-        ' 方法2: WScript.Shell を使用（フォールバック）
-        Err.Clear
-        Dim WsShell As Object
-        Set WsShell = CreateObject("WScript.Shell")
-        ' 0 = 非表示ウィンドウ, False = 非同期実行
-        WsShell.Run "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & scriptPath & """"", 0, False
-        Set WsShell = Nothing
-    End If
-    
     Set shellApp = Nothing
+    
     Exit Sub
     
 ErrorHandler:
@@ -101,61 +91,87 @@ Public Sub ToastWarning(ByVal WarningMessage As String)
     ShowToast "警告", WarningMessage, 10, "Warning"
 End Sub
 
-' === 診断テスト1: PowerShell連携確認 ===
+' === 診断テスト1: PowerShell連携確認（修正版） ===
 Public Sub TestPowerShell()
     ' PowerShellが機能するか簡易テスト
+    ' 注意: このテストはPowerShellウィンドウが表示されます
     Dim WsShell As Object
     Set WsShell = CreateObject("WScript.Shell")
     
-    ' メッセージボックスでPowerShell連携確認
-    Dim testCmd As String
-    testCmd = "powershell.exe -Command ""[System.Windows.Forms.MessageBox]::Show('PowerShell連携テスト')"""
+    ' -Command ではなく -File を使用して確実に実行
+    Dim scriptPath As String
+    scriptPath = Environ("TEMP") & "\test_ps.ps1"
     
-    WsShell.Run testCmd, 1, True
+    Dim fileNum As Integer
+    fileNum = FreeFile
+    Open scriptPath For Output As #fileNum
+    Print #fileNum, "Add-Type -AssemblyName System.Windows.Forms"
+    Print #fileNum, "[System.Windows.Forms.MessageBox]::Show('PowerShell連携テスト')"
+    Close #fileNum
+    
+    WsShell.Run "powershell.exe -ExecutionPolicy Bypass -File """ & scriptPath & """"", 1, True
     Set WsShell = Nothing
 End Sub
 
-' === 診断テスト2: 通知設定確認 ===
-Public Sub TestNotificationSettings()
-    ' Windowsの通知設定を確認するPowerShellスクリプトを実行
-    Dim WsShell As Object
-    Set WsShell = CreateObject("WScript.Shell")
-    
-    Dim psCommand As String
-    psCommand = "powershell.exe -Command """ & _
-        "Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications' -Name 'ToastEnabled' -ErrorAction SilentlyContinue | Select-Object ToastEnabled" & _
-        """"
-    
-    WsShell.Run psCommand, 1, True
-    Set WsShell = Nothing
-End Sub
-
-' === 診断テスト3: 基本的なバルーン通知テスト ===
+' === 診断テスト2: 基本的なバルーン通知テスト（修正版） ===
 Public Sub TestBasicBalloon()
     ' 最も基本的な方法でバルーン通知をテスト
+    Dim scriptPath As String
+    scriptPath = Environ("TEMP") & "\test_balloon.ps1"
+    
+    Dim fileNum As Integer
+    fileNum = FreeFile
+    Open scriptPath For Output As #fileNum
+    Print #fileNum, "Add-Type -AssemblyName System.Windows.Forms"
+    Print #fileNum, "Add-Type -AssemblyName System.Drawing"
+    Print #fileNum, "$n = New-Object System.Windows.Forms.NotifyIcon"
+    Print #fileNum, "$n.Icon = [System.Drawing.SystemIcons]::Information"
+    Print #fileNum, "$n.Visible = $true"
+    Print #fileNum, "$n.Text = 'テスト'"
+    Print #fileNum, "$n.ShowBalloonTip(10000, 'テスト', 'これはテスト通知です', [System.Windows.Forms.ToolTipIcon]::Information)"
+    Print #fileNum, "Start-Sleep -Seconds 12"
+    Print #fileNum, "$n.Visible = $false"
+    Print #fileNum, "$n.Dispose()"
+    Close #fileNum
+    
+    ' 同期的に実行して結果を確認
     Dim WsShell As Object
     Set WsShell = CreateObject("WScript.Shell")
     
-    ' 一時的に表示時間を長くしてテスト
-    Dim psCommand As String
-    psCommand = "powershell.exe -WindowStyle Hidden -Command """ & _
-        "Add-Type -AssemblyName System.Windows.Forms; " & _
-        "$n = New-Object System.Windows.Forms.NotifyIcon; " & _
-        "$n.Icon = [System.Drawing.SystemIcons]::Information; " & _
-        "$n.Visible = $true; " & _
-        "$n.ShowBalloonTip(10000, 'テスト', 'これはテスト通知です', [System.Windows.Forms.ToolTipIcon]::Information); " & _
-        "Start-Sleep -Seconds 12; " & _
-        "$n.Dispose()" & _
-        """"
-    
-    ' デバッグ出力
-    Debug.Print "Command: " & psCommand
-    
-    ' 実行（同期的にして結果を確認）
     Dim ret As Long
-    ret = WsShell.Run(psCommand, 0, True)
+    ret = WsShell.Run("powershell.exe -ExecutionPolicy Bypass -File """ & scriptPath & """"", 0, True)
     Debug.Print "Return code: " & ret
     
+    Set WsShell = Nothing
+End Sub
+
+' === 診断テスト3: Windows通知設定確認 ===
+Public Sub TestNotificationSettings()
+    ' Windowsの通知設定を確認
+    Dim WsShell As Object
+    Set WsShell = CreateObject("WScript.Shell")
+    
+    Dim scriptPath As String
+    scriptPath = Environ("TEMP") & "\test_settings.ps1"
+    
+    Dim fileNum As Integer
+    fileNum = FreeFile
+    Open scriptPath For Output As #fileNum
+    Print #fileNum, "$regPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications'"
+    Print #fileNum, "$value = Get-ItemProperty -Path $regPath -Name 'ToastEnabled' -ErrorAction SilentlyContinue"
+    Print #fileNum, "if ($value) {"
+    Print #fileNum, "    Write-Host 'ToastEnabled: ' $value.ToastEnabled"
+    Print #fileNum, "} else {"
+    Print #fileNum, "    Write-Host 'ToastEnabled: Not found (default: enabled)'"
+    Print #fileNum, "}"
+    Print #fileNum, ""
+    Print #fileNum, "$regPath2 = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings'"
+    Print #fileNum, "$apps = Get-ChildItem -Path $regPath2 -ErrorAction SilentlyContinue"
+    Print #fileNum, "Write-Host 'Notification apps count: ' $apps.Count"
+    Close #fileNum
+    
+    ' 結果を表示
+    WsShell.Run "powershell.exe -ExecutionPolicy Bypass -File """ & scriptPath & """"", 1, True
     Set WsShell = Nothing
 End Sub
 
@@ -164,10 +180,6 @@ Public Sub ShowToastWin10(ByVal Title As String, ByVal Message As String)
     ' Windows 10/11 のモダントースト通知
     On Error GoTo ErrorHandler
     
-    Dim WsShell As Object
-    Set WsShell = CreateObject("WScript.Shell")
-    
-    ' スクリプトファイル作成
     Dim scriptPath As String
     scriptPath = Environ("TEMP") & "\win10_toast.ps1"
     
@@ -183,16 +195,14 @@ Public Sub ShowToastWin10(ByVal Title As String, ByVal Message As String)
     Print #fileNum, "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Excel').Show($toast)"
     Close #fileNum
     
-    Dim psCommand As String
-    psCommand = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & scriptPath & """"
-    
-    WsShell.Run psCommand, 0, False
-    Set WsShell = Nothing
+    Dim shellApp As Object
+    Set shellApp = CreateObject("Shell.Application")
+    shellApp.ShellExecute "powershell.exe", "-ExecutionPolicy Bypass -WindowStyle Hidden -File """ & scriptPath & """"", "", "open", 0
+    Set shellApp = Nothing
     Exit Sub
     
 ErrorHandler:
     Debug.Print "ShowToastWin10 Error: " & Err.Description
-    Set WsShell = Nothing
 End Sub
 
 ' === 最終手段: MsgBoxを使用した通知 ===
