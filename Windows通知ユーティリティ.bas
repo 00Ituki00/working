@@ -31,9 +31,9 @@ Public Sub ShowToast(ByVal Title As String, ByVal Message As String, _
             iconValue = 0  ' ToolTipIcon.None
     End Select
     
-    ' スクリプトファイルに出力
+    ' スクリプトファイルに出力（長いパス名対策：\Environ("TEMP")を使用）
     Dim scriptPath As String
-    scriptPath = Environ("TEMP") & "\toast_notification.ps1"
+    scriptPath = CreateObject("WScript.Shell").ExpandEnvironmentStrings("%TEMP%") & "\toast_notification.ps1"
     
     Dim fileNum As Integer
     fileNum = FreeFile
@@ -51,11 +51,19 @@ Public Sub ShowToast(ByVal Title As String, ByVal Message As String, _
     Print #fileNum, "$notify.Dispose()"
     Close #fileNum
     
-    ' PowerShell実行
+    ' PowerShell実行（長いパス名対策）
     Dim WsShell As Object
     Set WsShell = CreateObject("WScript.Shell")
-    WsShell.Run "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & scriptPath & """"", 0, False
+    
+    ' パスに日本語が含まれる場合の対策：短縮パスを取得
+    Dim fso As Object
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Dim shortPath As String
+    shortPath = fso.GetFile(scriptPath).ShortPath
+    
+    WsShell.Run "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & shortPath & """"", 0, False
     Set WsShell = Nothing
+    Set fso = Nothing
     
     Exit Sub
     
