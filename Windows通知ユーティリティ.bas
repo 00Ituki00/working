@@ -1,145 +1,75 @@
-' Windows通知ユーティリティ v6
-' PowerShell経由でWindowsトレイ通知（バルーン通知）を表示
+' Windows通知ユーティリティ v7
+' PowerShell経由でWindowsタスクトレイにトースト通知を表示
+' 参考: https://enjoy-tech.net/45754/
 ' 修正履歴:
-'   v2: スクリプトファイル方式に変更
-'   v3: PowerShellウィンドウが表示される問題を修正
-'   v4: Add-Typeの問題を修正
-'   v5: ShowBalloonTipの第4引数を数値に修正
-'   v6: パス取得方法を統一（WScript.Shell.ExpandEnvironmentStrings）
-
-' === 共通：一時パス取得関数 ===
-Private Function GetTempPath() As String
-    ' WScript.Shellを使用して確実に一時パスを取得
-    Dim wsh As Object
-    Set wsh = CreateObject("WScript.Shell")
-    GetTempPath = wsh.ExpandEnvironmentStrings("%TEMP%")
-    Set wsh = Nothing
-End Function
-
-' === 共通：短縮パス取得関数 ===
-Private Function GetShortPath(ByVal longPath As String) As String
-    On Error Resume Next
-    Dim fso As Object
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    
-    ' ファイルが存在する場合は短縮パスを取得
-    If Dir(longPath) <> "" Then
-        GetShortPath = fso.GetFile(longPath).ShortPath
-    Else
-        ' ファイルが存在しない場合は元のパスを返す
-        GetShortPath = longPath
-    End If
-    
-    Set fso = Nothing
-End Function
+'   v7: 記事のコードを参考に全面書き換え
 
 ' === 通知表示関数 ===
-Public Sub ShowToast(ByVal Title As String, ByVal Message As String, _
-                     Optional Duration As Long = 10, _
-                     Optional IconType As String = "Info")
+' 引数:
+'   msg_title - 通知タイトル
+'   msg_text  - 通知本文
+' 戻り値:
+'   0 - 正常終了
+'   1 - 異常終了
+Public Function MakeToastNotification(ByVal msg_title As String, ByVal msg_text As String) As Integer
     
-    On Error GoTo ErrorHandler
+    ' 成功コードと失敗コードを定数として設定
+    Const C_SUCCESS As Integer = 0
+    Const C_FAILURE As Integer = 1
     
-    ' アイコン種別を数値に変換（ShowBalloonTipの第4引数は0-3）
-    Dim iconValue As Integer
-    Select Case LCase(IconType)
-        Case "info", "information"
-            iconValue = 1
-        Case "warning", "warn"
-            iconValue = 2
-        Case "error", "err"
-            iconValue = 3
-        Case Else
-            iconValue = 0
-    End Select
+    Dim cmd As String
     
-    ' スクリプトファイルパス
-    Dim scriptPath As String
-    scriptPath = GetTempPath() & "\toast_notification.ps1"
+    ' PowerShellコマンドの一部を定数として設定
+    Const C_CMD1 = "powershell -Command ""Add-Type -AssemblyName System.Windows.Forms;" & _
+        "$toast = New-Object System.Windows.Forms.NotifyIcon;" & _
+        "$toast.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon('C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'); " & _
+        "$toast.BalloonTipTitle = '"
     
-    ' スクリプトファイル作成
-    Dim fileNum As Integer
-    fileNum = FreeFile
+    Const C_CMD2 = "'; " & _
+        "$toast.BalloonTipText = '"
     
-    Open scriptPath For Output As #fileNum
-    Print #fileNum, "Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop"
-    Print #fileNum, "Add-Type -AssemblyName System.Drawing -ErrorAction Stop"
-    Print #fileNum, "$notify = New-Object System.Windows.Forms.NotifyIcon"
-    Print #fileNum, "$notify.Icon = [System.Drawing.SystemIcons]::Information"
-    Print #fileNum, "$notify.Visible = $true"
-    Print #fileNum, "$notify.Text = '" & EscapeForPowerShell(Title) & "'"
-    Print #fileNum, "$notify.ShowBalloonTip(" & Duration & ", '" & EscapeForPowerShell(Title) & "', '" & EscapeForPowerShell(Message) & "', " & iconValue & ")"
-    Print #fileNum, "Start-Sleep -Seconds " & Duration + 2
-    Print #fileNum, "$notify.Visible = $false"
-    Print #fileNum, "$notify.Dispose()"
-    Close #fileNum
+    Const C_CMD3 = "'; " & _
+        "$toast.Visible = $True; " & _
+        "$toast.ShowBalloonTip(0)"""
     
-    ' 短縮パスを取得してPowerShell実行
-    Dim shortPath As String
-    shortPath = GetShortPath(scriptPath)
+    ' PowerShellコマンドを構築
+    cmd = C_CMD1 & EscapeForShell(msg_title) & C_CMD2 & EscapeForShell(msg_text) & C_CMD3
     
-    Dim WsShell As Object
-    Set WsShell = CreateObject("WScript.Shell")
-    WsShell.Run "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & shortPath & """"", 0, False
-    Set WsShell = Nothing
+    ' PowerShellスクリプトを実行
+    On Error Resume Next
+    Call VBA.Shell(cmd, vbHide)
     
-    Exit Sub
+    If Err.Number <> 0 Then
+        MakeToastNotification = C_FAILURE
+        Err.Clear
+    Else
+        MakeToastNotification = C_SUCCESS
+    End If
     
-ErrorHandler:
-    Debug.Print "ShowToast Error: " & Err.Description
-End Sub
+End Function
 
-' === PowerShell用文字列エスケープ ===
-Private Function EscapeForPowerShell(ByVal str As String) As String
+' === シェル用文字列エスケープ ===
+Private Function EscapeForShell(ByVal str As String) As String
+    ' シングルクォートをエスケープ
     str = Replace(str, "'", "''")
-    str = Replace(str, "`", "``")
-    EscapeForPowerShell = str
+    EscapeForShell = str
 End Function
 
 ' === 簡易通知関数 ===
 Public Sub Toast(ByVal Title As String, ByVal Message As String)
-    ShowToast Title, Message, 10, "Info"
+    MakeToastNotification Title, Message
 End Sub
 
 Public Sub ToastComplete(Optional ByVal TaskName As String = "処理")
-    ShowToast TaskName & "完了", "正常に完了しました", 5, "Info"
+    MakeToastNotification TaskName & "完了", "正常に完了しました"
 End Sub
 
 Public Sub ToastError(ByVal ErrorMessage As String)
-    ShowToast "エラー", ErrorMessage, 15, "Error"
+    MakeToastNotification "エラー", ErrorMessage
 End Sub
 
 Public Sub ToastWarning(ByVal WarningMessage As String)
-    ShowToast "警告", WarningMessage, 10, "Warning"
-End Sub
-
-' === 診断テスト：基本的なバルーン通知 ===
-Public Sub TestBasicBalloon()
-    Dim scriptPath As String
-    scriptPath = GetTempPath() & "\test_balloon.ps1"
-    
-    Dim fileNum As Integer
-    fileNum = FreeFile
-    Open scriptPath For Output As #fileNum
-    Print #fileNum, "Add-Type -AssemblyName System.Windows.Forms"
-    Print #fileNum, "Add-Type -AssemblyName System.Drawing"
-    Print #fileNum, "$n = New-Object System.Windows.Forms.NotifyIcon"
-    Print #fileNum, "$n.Icon = [System.Drawing.SystemIcons]::Information"
-    Print #fileNum, "$n.Visible = $true"
-    Print #fileNum, "$n.Text = 'テスト'"
-    Print #fileNum, "$n.ShowBalloonTip(10000, 'テスト', 'これはテスト通知です', 1)"
-    Print #fileNum, "Start-Sleep -Seconds 12"
-    Print #fileNum, "$n.Visible = $false"
-    Print #fileNum, "$n.Dispose()"
-    Close #fileNum
-    
-    Dim shortPath As String
-    shortPath = GetShortPath(scriptPath)
-    
-    Dim WsShell As Object
-    Set WsShell = CreateObject("WScript.Shell")
-    WsShell.Run "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & shortPath & """"", 0, True
-    Set WsShell = Nothing
+    MakeToastNotification "警告", WarningMessage
 End Sub
 
 ' === 最終手段：MsgBox ===
