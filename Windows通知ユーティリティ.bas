@@ -1,5 +1,6 @@
-' Windows通知ユーティリティ
+' Windows通知ユーティリティ v2
 ' PowerShell経由でWindowsトレイ通知（バルーン通知）を表示
+' 問題修正: 通知が表示されない問題を解決
 
 ' === 通知表示関数 ===
 ' 引数:
@@ -29,21 +30,31 @@ Public Sub ShowToast(ByVal Title As String, ByVal Message As String, _
             psIcon = "None"
     End Select
     
-    ' PowerShellコマンド構築
-    Dim psCommand As String
-    psCommand = "powershell.exe -WindowStyle Hidden -Command " & _
-        """Add-Type -AssemblyName System.Windows.Forms; " & _
-        "$notify = New-Object System.Windows.Forms.NotifyIcon; " & _
-        "$notify.Icon = [System.Drawing.SystemIcons]::" & psIcon & "; " & _
-        "$notify.Visible = $true; " & _
-        "$notify.ShowBalloonTip(" & Duration & ",'" & _
-        EscapeForPowerShell(Title) & "','" & _
-        EscapeForPowerShell(Message) & "'," & _
-        "[System.Windows.Forms.ToolTipIcon]::" & psIcon & "); " & _
-        "Start-Sleep -Seconds " & Duration + 1 & "; " & _
-        "$notify.Dispose()"""
+    ' スクリプトファイルに出力して実行（長いコマンド対策・確実な実行のため）
+    Dim scriptPath As String
+    scriptPath = Environ("TEMP") & "\toast_notification.ps1"
     
-    ' 非同期実行（VBA処理をブロックしない）
+    Dim fileNum As Integer
+    fileNum = FreeFile
+    
+    Open scriptPath For Output As #fileNum
+    Print #fileNum, "Add-Type -AssemblyName System.Windows.Forms"
+    Print #fileNum, "$notify = New-Object System.Windows.Forms.NotifyIcon"
+    Print #fileNum, "$notify.Icon = [System.Drawing.SystemIcons]::" & psIcon
+    Print #fileNum, "$notify.Visible = $true"
+    Print #fileNum, "$notify.ShowBalloonTip(" & Duration & ", '" & EscapeForPowerShell(Title) & "', '" & EscapeForPowerShell(Message) & "', [System.Windows.Forms.ToolTipIcon]::" & psIcon & ")"
+    Print #fileNum, "Start-Sleep -Seconds " & Duration + 2
+    Print #fileNum, "$notify.Dispose()"
+    Close #fileNum
+    
+    ' PowerShellスクリプト実行
+    Dim psCommand As String
+    psCommand = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & scriptPath & """"
+    
+    ' デバッグ用: コマンドを確認
+    Debug.Print "PS Command: " & psCommand
+    
+    ' 実行（非同期）
     WsShell.Run psCommand, 0, False
     
     Set WsShell = Nothing
@@ -81,4 +92,57 @@ End Sub
 ' === 警告通知 ===
 Public Sub ToastWarning(ByVal WarningMessage As String)
     ShowToast "警告", WarningMessage, 10, "Warning"
+End Sub
+
+' === テスト用診断関数 ===
+Public Sub TestNotification()
+    ' PowerShellが機能するか簡易テスト
+    Dim WsShell As Object
+    Set WsShell = CreateObject("WScript.Shell")
+    
+    ' メッセージボックスでPowerShell連携確認
+    Dim testCmd As String
+    testCmd = "powershell.exe -Command ""[System.Windows.Forms.MessageBox]::Show('PowerShell連携テスト')"""
+    
+    WsShell.Run testCmd, 1, True
+    
+    Set WsShell = Nothing
+End Sub
+
+' === Windows 10/11 トースト通知（代替案） ===
+Public Sub ShowToastWin10(ByVal Title As String, ByVal Message As String)
+    ' Windows 10/11 のモダントースト通知
+    ' 注意: この方法はWindows 10/11でしか動作しません
+    
+    On Error GoTo ErrorHandler
+    
+    Dim WsShell As Object
+    Set WsShell = CreateObject("WScript.Shell")
+    
+    ' スクリプトファイル作成
+    Dim scriptPath As String
+    scriptPath = Environ("TEMP") & "\win10_toast.ps1"
+    
+    Dim fileNum As Integer
+    fileNum = FreeFile
+    
+    Open scriptPath For Output As #fileNum
+    Print #fileNum, "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime] | Out-Null"
+    Print #fileNum, "$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)"
+    Print #fileNum, "$template.SelectSingleNode('//text[@id=""1""]').AppendChild($template.CreateTextNode('" & EscapeForPowerShell(Title) & "'))"
+    Print #fileNum, "$template.SelectSingleNode('//text[@id=""2""]').AppendChild($template.CreateTextNode('" & EscapeForPowerShell(Message) & "'))"
+    Print #fileNum, "$toast = [Windows.UI.Notifications.ToastNotification]::new($template)"
+    Print #fileNum, "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Excel').Show($toast)"
+    Close #fileNum
+    
+    Dim psCommand As String
+    psCommand = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & scriptPath & """"
+    
+    WsShell.Run psCommand, 0, False
+    Set WsShell = Nothing
+    Exit Sub
+    
+ErrorHandler:
+    Debug.Print "ShowToastWin10 Error: " & Err.Description
+    Set WsShell = Nothing
 End Sub
