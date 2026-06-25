@@ -79,6 +79,23 @@ Private Function GetRomanTable() As Object
     ' わ行
     table.Add "わ", "wa": table.Add "を", "wo": table.Add "ん", "n"
     
+    ' 小さなあ行（小書き）
+    table.Add "ぁ", "a": table.Add "ぃ", "i": table.Add "ぅ", "u"
+    table.Add "ぇ", "e": table.Add "ぉ", "o"
+    
+    ' 小さなカナ（小書き）
+    table.Add "ァ", "a": table.Add "ィ", "i": table.Add "ゥ", "u"
+    table.Add "ェ", "e": table.Add "ォ", "o"
+    
+    ' 小さなヤ行、ワ行
+    table.Add "ゃ", "ya": table.Add "ゅ", "yu": table.Add "ょ", "yo"
+    table.Add "ャ", "ya": table.Add "ュ", "yu": table.Add "ョ", "yo"
+    table.Add "ゎ", "wa": table.Add "ヮ", "wa"
+    
+    ' 促音・撥音・長音
+    table.Add "っ", "xtsu": table.Add "ッ", "xtsu"
+    table.Add "ー", "-": table.Add "ｰ", "-"
+    
     ' 拗音
     table.Add "きゃ", "kya": table.Add "きゅ", "kyu": table.Add "きょ", "kyo"
     table.Add "しゃ", "sha": table.Add "しゅ", "shu": table.Add "しょ", "sho"
@@ -91,10 +108,6 @@ Private Function GetRomanTable() As Object
     table.Add "じゃ", "ja": table.Add "じゅ", "ju": table.Add "じょ", "jo"
     table.Add "びゃ", "bya": table.Add "びゅ", "byu": table.Add "びょ", "byo"
     table.Add "ぴゃ", "pya": table.Add "ぴゅ", "pyu": table.Add "ぴょ", "pyo"
-    
-    ' 促音・撥音
-    table.Add "っ", "xtsu"
-    table.Add "ー", "-"
     
     Set GetRomanTable = table
 End Function
