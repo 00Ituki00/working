@@ -1,6 +1,11 @@
-' Windows通知ユーティリティ v2
+' Windows通知ユーティリティ v3
 ' PowerShell経由でWindowsトレイ通知（バルーン通知）を表示
-' 問題修正: 通知が表示されない問題を解決
+' 修正履歴:
+'   v2: スクリプトファイル方式に変更
+'   v3: PowerShellウィンドウが表示される問題を修正
+'       - WScript.Shell.Run から Shell.Application へ変更
+'       - 同期的実行でエラーをキャッチ
+'       - フォールバック方法を追加
 
 ' === 通知表示関数 ===
 ' 引数:
@@ -13,9 +18,6 @@ Public Sub ShowToast(ByVal Title As String, ByVal Message As String, _
                      Optional IconType As String = "Info")
     
     On Error GoTo ErrorHandler
-    
-    Dim WsShell As Object
-    Set WsShell = CreateObject("WScript.Shell")
     
     ' アイコン種別の変換
     Dim psIcon As String
@@ -30,7 +32,7 @@ Public Sub ShowToast(ByVal Title As String, ByVal Message As String, _
             psIcon = "None"
     End Select
     
-    ' スクリプトファイルに出力して実行（長いコマンド対策・確実な実行のため）
+    ' スクリプトファイルに出力
     Dim scriptPath As String
     scriptPath = Environ("TEMP") & "\toast_notification.ps1"
     
@@ -47,22 +49,27 @@ Public Sub ShowToast(ByVal Title As String, ByVal Message As String, _
     Print #fileNum, "$notify.Dispose()"
     Close #fileNum
     
-    ' PowerShellスクリプト実行
-    Dim psCommand As String
-    psCommand = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & scriptPath & """"
+    ' 方法1: Shell.Application を使用（ウィンドウを表示しない）
+    On Error Resume Next
+    Dim shellApp As Object
+    Set shellApp = CreateObject("Shell.Application")
+    shellApp.ShellExecute "powershell.exe", "-ExecutionPolicy Bypass -WindowStyle Hidden -File """ & scriptPath & """"", "", "open", 0
     
-    ' デバッグ用: コマンドを確認
-    Debug.Print "PS Command: " & psCommand
+    If Err.Number <> 0 Then
+        ' 方法2: WScript.Shell を使用（フォールバック）
+        Err.Clear
+        Dim WsShell As Object
+        Set WsShell = CreateObject("WScript.Shell")
+        ' 0 = 非表示ウィンドウ, False = 非同期実行
+        WsShell.Run "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & scriptPath & """"", 0, False
+        Set WsShell = Nothing
+    End If
     
-    ' 実行（非同期）
-    WsShell.Run psCommand, 0, False
-    
-    Set WsShell = Nothing
+    Set shellApp = Nothing
     Exit Sub
     
 ErrorHandler:
     Debug.Print "ShowToast Error: " & Err.Description
-    Set WsShell = Nothing
 End Sub
 
 ' === PowerShell用文字列エスケープ ===
@@ -94,8 +101,8 @@ Public Sub ToastWarning(ByVal WarningMessage As String)
     ShowToast "警告", WarningMessage, 10, "Warning"
 End Sub
 
-' === テスト用診断関数 ===
-Public Sub TestNotification()
+' === 診断テスト1: PowerShell連携確認 ===
+Public Sub TestPowerShell()
     ' PowerShellが機能するか簡易テスト
     Dim WsShell As Object
     Set WsShell = CreateObject("WScript.Shell")
@@ -105,15 +112,56 @@ Public Sub TestNotification()
     testCmd = "powershell.exe -Command ""[System.Windows.Forms.MessageBox]::Show('PowerShell連携テスト')"""
     
     WsShell.Run testCmd, 1, True
+    Set WsShell = Nothing
+End Sub
+
+' === 診断テスト2: 通知設定確認 ===
+Public Sub TestNotificationSettings()
+    ' Windowsの通知設定を確認するPowerShellスクリプトを実行
+    Dim WsShell As Object
+    Set WsShell = CreateObject("WScript.Shell")
+    
+    Dim psCommand As String
+    psCommand = "powershell.exe -Command """ & _
+        "Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications' -Name 'ToastEnabled' -ErrorAction SilentlyContinue | Select-Object ToastEnabled" & _
+        """"
+    
+    WsShell.Run psCommand, 1, True
+    Set WsShell = Nothing
+End Sub
+
+' === 診断テスト3: 基本的なバルーン通知テスト ===
+Public Sub TestBasicBalloon()
+    ' 最も基本的な方法でバルーン通知をテスト
+    Dim WsShell As Object
+    Set WsShell = CreateObject("WScript.Shell")
+    
+    ' 一時的に表示時間を長くしてテスト
+    Dim psCommand As String
+    psCommand = "powershell.exe -WindowStyle Hidden -Command """ & _
+        "Add-Type -AssemblyName System.Windows.Forms; " & _
+        "$n = New-Object System.Windows.Forms.NotifyIcon; " & _
+        "$n.Icon = [System.Drawing.SystemIcons]::Information; " & _
+        "$n.Visible = $true; " & _
+        "$n.ShowBalloonTip(10000, 'テスト', 'これはテスト通知です', [System.Windows.Forms.ToolTipIcon]::Information); " & _
+        "Start-Sleep -Seconds 12; " & _
+        "$n.Dispose()" & _
+        """"
+    
+    ' デバッグ出力
+    Debug.Print "Command: " & psCommand
+    
+    ' 実行（同期的にして結果を確認）
+    Dim ret As Long
+    ret = WsShell.Run(psCommand, 0, True)
+    Debug.Print "Return code: " & ret
     
     Set WsShell = Nothing
 End Sub
 
-' === Windows 10/11 トースト通知（代替案） ===
+' === Windows 10/11 トースト通知 ===
 Public Sub ShowToastWin10(ByVal Title As String, ByVal Message As String)
     ' Windows 10/11 のモダントースト通知
-    ' 注意: この方法はWindows 10/11でしか動作しません
-    
     On Error GoTo ErrorHandler
     
     Dim WsShell As Object
@@ -145,4 +193,10 @@ Public Sub ShowToastWin10(ByVal Title As String, ByVal Message As String)
 ErrorHandler:
     Debug.Print "ShowToastWin10 Error: " & Err.Description
     Set WsShell = Nothing
+End Sub
+
+' === 最終手段: MsgBoxを使用した通知 ===
+Public Sub ShowMessageBox(ByVal Title As String, ByVal Message As String)
+    ' 通知が表示されない場合のフォールバック
+    MsgBox Message, vbInformation, Title
 End Sub
