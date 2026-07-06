@@ -37,7 +37,6 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     End If
     
     ' === Step 1: 元ブック内に一時シートを作成（元シートは無傷） ===
-    Dim tempSheet As Worksheet
     fromsheet.Copy After:=FromBook.Sheets(FromBook.Sheets.Count)
     Set tempSheet = FromBook.Sheets(FromBook.Sheets.Count)
     tempSheet.Name = "TempExport_" & Format(Now, "hhmmss")
