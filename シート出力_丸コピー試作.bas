@@ -41,11 +41,10 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     Set tempSheet = FromBook.Sheets(FromBook.Sheets.Count)
     tempSheet.Name = "TempExport_" & Format(Now, "hhmmss")
     
-    ' === Step 2: 一時シートのデータ接続を完全切断（元ブックの他シートには影響なし） ===
-    Call 切断データ接続(tempSheet)
+    ' === Step 2: 一時シートのピボット・テーブル・リストオブジェクトを値化（接続は削除しない） ===
     Call 値化ピボットテーブル(tempSheet)
     Call 値化リストオブジェクト(tempSheet)
-    Call 正規化名前定義(tempSheet, FromBook)
+    ' 名前定義は元ブックのものを維持（コピー後にコピー先で整理）
     
     ' === Step 3: 一時シートをToBookにコピー（接続なし＝高速） ===
     tempSheet.Copy After:=ToBook.Sheets(ToBook.Sheets.Count)
@@ -56,7 +55,11 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     tempSheet.Delete
     Application.DisplayAlerts = False
     
-    ' === Step 5: コピーされたシートの名前を設定 ===
+    ' === Step 5: コピー先ブックの接続を削除（コピー先は接続が少ない＝高速） ===
+    Call 切断データ接続(copiedSheet)
+    Call 正規化名前定義(copiedSheet, FromBook)
+    
+    ' === Step 6: コピーされたシートの名前を設定 ===
     On Error Resume Next
     copiedSheet.Name = ToSheet.Name
     On Error GoTo Cleanup
