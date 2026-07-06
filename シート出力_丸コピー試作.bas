@@ -13,6 +13,8 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     Dim evtState As Boolean
     Dim alertState As Boolean
     Dim screenState As Boolean
+    Dim tempSheet As Worksheet
+    Dim copiedSheet As Worksheet
     
     ' === 事前：Excel設定を保存・抑制 ===
     calcState = Application.Calculation
