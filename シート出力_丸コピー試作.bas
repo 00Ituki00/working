@@ -34,22 +34,34 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
         Set FromRange = Intersect(FromRange, usedRng)
     End If
     
-    ' === Step 1: シート丸ごと複製 ===
-    ' ToBookにfromsheetをコピー（シート末尾に追加）
-    fromsheet.Copy After:=ToBook.Sheets(ToBook.Sheets.Count)
+    ' === Step 1: 元ブック内に一時シートを作成（元シートは無傷） ===
+    Dim tempSheet As Worksheet
+    fromsheet.Copy After:=FromBook.Sheets(FromBook.Sheets.Count)
+    Set tempSheet = FromBook.Sheets(FromBook.Sheets.Count)
+    tempSheet.Name = "TempExport_" & Format(Now, "hhmmss")
     
-    ' 複製されたシートを取得（最後に追加されたシート）
-    Dim copiedSheet As Worksheet
+    ' === Step 2: 一時シートのデータ接続を完全切断（元ブックの他シートには影響なし） ===
+    Call 切断データ接続(tempSheet)
+    Call 値化ピボットテーブル(tempSheet)
+    Call 値化リストオブジェクト(tempSheet)
+    Call 正規化名前定義(tempSheet, FromBook)
+    
+    ' === Step 3: 一時シートをToBookにコピー（接続なし＝高速） ===
+    tempSheet.Copy After:=ToBook.Sheets(ToBook.Sheets.Count)
     Set copiedSheet = ToBook.Sheets(ToBook.Sheets.Count)
     
-    ' 名前が競合する場合があるのでリネーム
+    ' === Step 4: 元ブックの一時シートを削除（お掃除） ===
+    Application.DisplayAlerts = False
+    tempSheet.Delete
+    Application.DisplayAlerts = False
+    
+    ' === Step 5: コピーされたシートの名前を設定 ===
     On Error Resume Next
     copiedSheet.Name = ToSheet.Name
     On Error GoTo Cleanup
     
-    ' === Step 2: selectiononly時、FromRange以外を一括削除 ===
+    ' === Step 6: selectiononly時、FromRange以外を一括削除 ===
     If selectiononly Then
-        ' FromRangeの前後左右の不要領域を削除
         Dim firstRow As Long, lastRow As Long
         Dim firstCol As Long, lastCol As Long
         firstRow = FromRange.Row
@@ -62,7 +74,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
             copiedSheet.Rows("1:" & firstRow - 1).Delete
         End If
         
-        ' 下側削除（行数が減るので注意）
+        ' 下側削除
         Dim currentLastRow As Long
         currentLastRow = copiedSheet.Cells(copiedSheet.Rows.Count, 1).End(xlUp).Row
         If lastRow < currentLastRow Then
@@ -85,19 +97,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
         Set FromRange = copiedSheet.Range("A1").Resize(lastRow - firstRow + 1, lastCol - firstCol + 1)
     End If
     
-    ' === Step 3: データ接続を完全に切り離し ===
-    Call 切断データ接続(copiedSheet)
-    
-    ' === Step 4: ピボットテーブルを値化 ===
-    Call 値化ピボットテーブル(copiedSheet)
-    
-    ' === Step 5: テーブル（ListObject）を値化 ===
-    Call 値化リストオブジェクト(copiedSheet)
-    
-    ' === Step 6: 外部リンク・名前定義の修正 ===
-    Call 正規化名前定義(copiedSheet, FromBook)
-    
-    ' === Step 7: 図形の調整（シートコピーで位置は維持されるが一応確認）===
+    ' === Step 7: 図形の調整（シートコピーで位置は維持されるが一応確認） ===
     Call 調整図形位置(copiedSheet)
     
     ' === Step 8: ウィンドウ設定コピー ===
@@ -111,17 +111,10 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
         copiedSheet.Application.ActiveWindow.FreezePanes = True
     End If
     
-    ' === Step 9: ToSheetと入れ替え（必要に応じて）===
-    ' 呼び出し元が指定したToSheetの位置に移動
+    ' === Step 9: ToSheetと入れ替え（必要に応じて） ===
     If copiedSheet.Index <> ToSheet.Index Then
         copiedSheet.Move Before:=ToSheet
     End If
-    
-    ' 元のToSheetが空シートなら削除（オプション）
-    ' 呼び出し元の設計に依存するため、現段階ではコメントアウト
-    ' Application.DisplayAlerts = False
-    ' ToSheet.Delete
-    ' Application.DisplayAlerts = alertState
     
     maked.Add ToBook
     
