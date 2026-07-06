@@ -229,42 +229,45 @@ End Function
 
 ' === サブルーチン：書式属性を直接設定（PasteSpecial xlPasteFormats 代替） ===
 Private Sub 書式を直接設定(srcSheet As Worksheet, srcRange As Range, dstSheet As Worksheet, dstRange As Range)
-    ' 方針: 行単位でスキャンし、連続した同じ書式のセルをグループ化して一括設定
-    ' これによりセル単位の設定を回避
-    
     Dim r As Long, c As Long
     Dim srcRow As Long, srcCol As Long
     Dim lastRow As Long, lastCol As Long
     lastRow = srcRange.Rows.Count
     lastCol = srcRange.Columns.Count
     
-    ' バッファ用コレクション
-    Dim fmtGroups As Collection
-    Set fmtGroups = New Collection
-    
     ' 行単位で処理（Activateなし）
     For r = 1 To lastRow
         srcRow = srcRange.Row + r - 1
         
-        ' この行の書式を取得
-        Dim rowRange As Range
-        Set rowRange = srcSheet.Range(srcSheet.Cells(srcRow, srcRange.Column), _
-                                       srcSheet.Cells(srcRow, srcRange.Column + lastCol - 1))
+        ' この行のセルごとに書式を取得（配列に格納）
+        Dim cellBgColors() As Variant
+        Dim cellFontColors() As Variant
+        Dim cellBold() As Variant
+        Dim cellItalic() As Variant
+        Dim cellHAlign() As Variant
+        Dim cellVAlign() As Variant
         
-        ' Interior.Color, Font.Bold, Font.Color, HorizontalAlignment を配列で取得
-        Dim bgColors As Variant
-        Dim fontColors As Variant
-        Dim fontBold As Variant
-        Dim fontItalic As Variant
-        Dim hAlign As Variant
-        Dim vAlign As Variant
+        ReDim cellBgColors(1 To lastCol)
+        ReDim cellFontColors(1 To lastCol)
+        ReDim cellBold(1 To lastCol)
+        ReDim cellItalic(1 To lastCol)
+        ReDim cellHAlign(1 To lastCol)
+        ReDim cellVAlign(1 To lastCol)
         
-        bgColors = rowRange.Interior.Color
-        fontColors = rowRange.Font.Color
-        fontBold = rowRange.Font.Bold
-        fontItalic = rowRange.Font.Italic
-        hAlign = rowRange.HorizontalAlignment
-        vAlign = rowRange.VerticalAlignment
+        For c = 1 To lastCol
+            srcCol = srcRange.Column + c - 1
+            Dim srcCell As Range
+            Set srcCell = srcSheet.Cells(srcRow, srcCol)
+            
+            On Error Resume Next
+            cellBgColors(c) = srcCell.Interior.Color
+            cellFontColors(c) = srcCell.Font.Color
+            cellBold(c) = srcCell.Font.Bold
+            cellItalic(c) = srcCell.Font.Italic
+            cellHAlign(c) = srcCell.HorizontalAlignment
+            cellVAlign(c) = srcCell.VerticalAlignment
+            On Error GoTo 0
+        Next c
         
         ' 列方向に連続した同じ書式をグループ化
         Dim groupStart As Long
@@ -277,21 +280,21 @@ Private Sub 書式を直接設定(srcSheet As Worksheet, srcRange As Range, dstS
         
         groupStart = 1
         If lastCol > 0 Then
-            currentBg = bgColors(1, 1)
-            currentFontColor = fontColors(1, 1)
-            currentBold = fontBold(1, 1)
-            currentItalic = fontItalic(1, 1)
-            currentHAlign = hAlign(1, 1)
-            currentVAlign = vAlign(1, 1)
+            currentBg = cellBgColors(1)
+            currentFontColor = cellFontColors(1)
+            currentBold = cellBold(1)
+            currentItalic = cellItalic(1)
+            currentHAlign = cellHAlign(1)
+            currentVAlign = cellVAlign(1)
         End If
         
         For c = 2 To lastCol
-            If bgColors(1, c) <> currentBg Or _
-               fontColors(1, c) <> currentFontColor Or _
-               fontBold(1, c) <> currentBold Or _
-               fontItalic(1, c) <> currentItalic Or _
-               hAlign(1, c) <> currentHAlign Or _
-               vAlign(1, c) <> currentVAlign Then
+            If cellBgColors(c) <> currentBg Or _
+               cellFontColors(c) <> currentFontColor Or _
+               cellBold(c) <> currentBold Or _
+               cellItalic(c) <> currentItalic Or _
+               cellHAlign(c) <> currentHAlign Or _
+               cellVAlign(c) <> currentVAlign Then
                 
                 ' 前のグループを設定
                 If groupStart <= c - 1 Then
@@ -302,12 +305,12 @@ Private Sub 書式を直接設定(srcSheet As Worksheet, srcRange As Range, dstS
                 
                 ' 新しいグループ開始
                 groupStart = c
-                currentBg = bgColors(1, c)
-                currentFontColor = fontColors(1, c)
-                currentBold = fontBold(1, c)
-                currentItalic = fontItalic(1, c)
-                currentHAlign = hAlign(1, c)
-                currentVAlign = vAlign(1, c)
+                currentBg = cellBgColors(c)
+                currentFontColor = cellFontColors(c)
+                currentBold = cellBold(c)
+                currentItalic = cellItalic(c)
+                currentHAlign = cellHAlign(c)
+                currentVAlign = cellVAlign(c)
             End If
         Next c
         
