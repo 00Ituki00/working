@@ -4,6 +4,32 @@
 
 Global maked As New Collection
 
+' === ヘルパー：Rangeの差集合（baseRangeからsubtractRangesを除く） ===
+Private Function RangeSubtract(baseRange As Range, subtractRanges As Collection) As Range
+    Dim result As Range
+    Dim cell As Range
+    Dim subRng As Range
+    Dim isInSubtract As Boolean
+    
+    For Each cell In baseRange.Cells
+        isInSubtract = False
+        For Each subRng In subtractRanges
+            If Not Intersect(cell, subRng) Is Nothing Then
+                isInSubtract = True
+                Exit For
+            End If
+        Next subRng
+        If Not isInSubtract Then
+            If result Is Nothing Then
+                Set result = cell
+            Else
+                Set result = Union(result, cell)
+            End If
+        End If
+    Next cell
+    Set RangeSubtract = result
+End Function
+
 ' === メイン関数：高速化2 ===
 Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet, FromRange As Range, ToBook As Workbook, ToSheet As Worksheet, Optional selectiononly = False, Optional fitpage = False) As Workbook
     Dim pt As PivotTable
@@ -29,6 +55,9 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     Application.ScreenUpdating = False
     
     On Error GoTo Cleanup
+    
+    ' === テーマ適用 ===
+    ToBook.ApplyTheme "C:\Users\h_ikegami\AppData\Roaming\Microsoft\Templates\Document Themes\default.thmx"
     
     ' === Step 0: FromRangeをUsedRangeで絞る ===
     Dim usedRng As Range
@@ -121,10 +150,17 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
         ToSheet.Columns(FromRange.Column + c - 1).ColumnWidth = colWidths(c)
     Next c
     
-    ' === Step 9: 書式をPasteSpecialで一括適用（セル単位ループより高速） ===
-    FromRange.Copy
-    ToRange.PasteSpecial Paste:=xlPasteFormats
-    Application.CutCopyMode = False
+    ' === Step 9: ピボットテーブル以外の範囲に書式を適用 ===
+    Dim nonPtRange As Range
+    Set nonPtRange = RangeSubtract(FromRange, ptRanges)
+    
+    If Not nonPtRange Is Nothing Then
+        nonPtRange.Copy
+        Dim nonPtToRange As Range
+        Set nonPtToRange = ToSheet.Range(nonPtRange.Address)
+        nonPtToRange.PasteSpecial Paste:=xlPasteFormats
+        Application.CutCopyMode = False
+    End If
     
     ' === Step 10: ピボットテーブル範囲を上書き ===
     Dim ptItem As Range
@@ -148,6 +184,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
         If Not Intersect(Range(sh.TopLeftCell, sh.BottomRightCell), FromRange) Is Nothing Then
             If sh.Type = msoChart Or sh.Type = 17 Or sh.Type = 13 Then
                 On Error Resume Next
+                Application.CutCopyMode = False
                 sh.Copy
                 ToSheet.PasteSpecial Format:=0
                 
