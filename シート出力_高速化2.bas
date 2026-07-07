@@ -54,10 +54,10 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     Application.DisplayAlerts = False
     Application.ScreenUpdating = False
     
-    On Error GoTo Cleanup
-    
     ' === テーマ適用 ===
+    On Error Resume Next
     ToBook.ApplyTheme "C:\Users\h_ikegami\AppData\Roaming\Microsoft\Templates\Document Themes\default.thmx"
+    On Error GoTo 0
     
     ' === Step 0: FromRangeをUsedRangeで絞る ===
     Dim usedRng As Range
@@ -70,9 +70,9 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     Dim ptRanges As Collection
     Set ptRanges = New Collection
     
+    On Error Resume Next
     For Each pt In fromsheet.PivotTables
         If Not Intersect(pt.TableRange2, FromRange) Is Nothing Then
-            On Error Resume Next
             Dim ptRange As Range
             If pt.ShowValuesRow Then
                 Set ptRange = Intersect(pt.TableRange1.Offset(1, 0).Resize(pt.TableRange1.Rows.Count - 1), FromRange)
@@ -89,25 +89,25 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
                     ptRanges.Add ptPageRange
                 End If
             End If
-            On Error GoTo Cleanup
         End If
     Next pt
+    On Error GoTo 0
     
     ' === Step 2: テーブル（リストオブジェクト）の範囲を保存 ===
     Dim tblRanges As Collection
     Set tblRanges = New Collection
     
+    On Error Resume Next
     For Each lo In fromsheet.ListObjects
         If Not Intersect(lo.Range, FromRange) Is Nothing Then
-            On Error Resume Next
             Dim loIntersect As Range
             Set loIntersect = Intersect(lo.Range, FromRange)
             If Not loIntersect Is Nothing Then
                 tblRanges.Add loIntersect
             End If
-            On Error GoTo Cleanup
         End If
     Next lo
+    On Error GoTo 0
     
     ' === Step 3: データを配列で一括コピー ===
     dataArr = FromRange.Value2
@@ -151,6 +151,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     Next c
     
     ' === Step 9: ピボットテーブル以外の範囲に書式を適用 ===
+    On Error Resume Next
     Dim nonPtRange As Range
     Set nonPtRange = RangeSubtract(FromRange, ptRanges)
     
@@ -161,11 +162,12 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
         nonPtToRange.PasteSpecial Paste:=xlPasteFormats
         Application.CutCopyMode = False
     End If
+    On Error GoTo 0
     
     ' === Step 10: ピボットテーブル範囲を上書き ===
+    On Error Resume Next
     Dim ptItem As Range
     For Each ptItem In ptRanges
-        On Error Resume Next
         Dim ptIntersect As Range
         Set ptIntersect = Intersect(ptItem, FromRange)
         If Not ptIntersect Is Nothing Then
@@ -173,17 +175,19 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
             ToSheet.Cells(ptIntersect.Cells(1, 1).Row, ptIntersect.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteValuesAndNumberFormats
             ToSheet.Cells(ptIntersect.Cells(1, 1).Row, ptIntersect.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteFormats
         End If
-        On Error GoTo Cleanup
     Next ptItem
+    On Error GoTo 0
     
     ' === Step 11: 条件書式を正規化 ===
+    On Error Resume Next
     書式を正規化 ToRange
+    On Error GoTo 0
     
     ' === Step 12: 図形をコピー（Activateなし） ===
+    On Error Resume Next
     For Each sh In fromsheet.Shapes
         If Not Intersect(Range(sh.TopLeftCell, sh.BottomRightCell), FromRange) Is Nothing Then
             If sh.Type = msoChart Or sh.Type = 17 Or sh.Type = 13 Then
-                On Error Resume Next
                 Application.CutCopyMode = False
                 sh.Copy
                 ToSheet.PasteSpecial Format:=0
@@ -193,13 +197,14 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
                 newShape.Top = ToSheet.Range(sh.TopLeftCell.Address).Top
                 newShape.Left = ToSheet.Range(sh.TopLeftCell.Address).Left
                 newShape.SetShapesDefaultProperties
-                On Error GoTo Cleanup
             End If
         End If
         If ToSheet.Shapes.Count > 0 Then 図形スナップ ToSheet.Shapes(ToSheet.Shapes.Count)
     Next sh
+    On Error GoTo 0
     
     ' === Step 13: ウィンドウ設定のコピー ===
+    On Error Resume Next
     ToSheet.Activate
     ToSheet.Cells(1).Select
     ToSheet.Parent.Windows(1).Zoom = fromsheet.Parent.Windows(1).Zoom
@@ -209,6 +214,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
         ToSheet.Parent.Windows(1).SplitHorizontal = fromsheet.Parent.Windows(1).SplitHorizontal
         ToSheet.Application.ActiveWindow.FreezePanes = True
     End If
+    On Error GoTo 0
     
     ' === Step 14: 名前定義をコピー ===
     On Error Resume Next
@@ -227,9 +233,10 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
             End If
         End If
     Next n
-    On Error GoTo Cleanup
+    On Error GoTo 0
     
     ' === Step 15: 選択範囲外の削除 ===
+    On Error Resume Next
     If selectiononly Then
         If FromRange.Column + FromRange.Columns.Count <= ToSheet.Columns.Count Then
             ToSheet.Range(ToSheet.Cells(1, FromRange.Column + FromRange.Columns.Count), _
@@ -246,6 +253,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
             ToSheet.Range(ToSheet.Rows(1), ToSheet.Rows(FromRange.Cells(1, 1).Row - 1)).Delete
         End If
     End If
+    On Error GoTo 0
     
     ToSheet.Cells(1, 1).Select
     ToBook.Sheets(1).Activate
