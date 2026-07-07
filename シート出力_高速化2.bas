@@ -112,10 +112,10 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     ' === Step 3: データを配列で一括コピー ===
     dataArr = FromRange.Value2
     
-    ' 空白処理
+    ' 空白処理（エラーのみクリア、Emptyはそのまま）
     For r = 1 To UBound(dataArr, 1)
         For c = 1 To UBound(dataArr, 2)
-            If IsEmpty(dataArr(r, c)) Or IsError(dataArr(r, c)) Then
+            If IsError(dataArr(r, c)) Then
                 dataArr(r, c) = ""
             End If
         Next c
