@@ -180,18 +180,47 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     ' === Step 12: 図形をコピー ===
     On Error Resume Next
     ToSheet.Activate
-    Dim newShape As Shape
+    Application.CutCopyMode = False
+    
+    Dim copyRetry As Integer
+    Dim copySuccess As Boolean
+    
     For Each sh In fromsheet.Shapes
         If Not Intersect(Range(sh.TopLeftCell, sh.BottomRightCell), FromRange) Is Nothing Then
             If sh.Type = msoChart Or sh.Type = 17 Or sh.Type = 13 Then
-                On Error GoTo recopy
-                Application.CutCopyMode = False
-                sh.Copy
-                ToSheet.PasteSpecial Format:=0
-                Set newShape = ToSheet.Shapes(ToSheet.Shapes.Count)
-                newShape.Top = ToSheet.Range(sh.TopLeftCell.Address).Top
-                newShape.Left = ToSheet.Range(sh.TopLeftCell.Address).Left
-                newShape.SetShapesDefaultProperties
+                copySuccess = False
+                copyRetry = 0
+                
+                Do While copyRetry < 3 And Not copySuccess
+                    On Error Resume Next
+                    Err.Clear
+                    
+                    sh.Copy
+                    ToSheet.PasteSpecial Format:=0
+                    
+                    If Err.Number = 0 Then
+                        Set newShape = ToSheet.Shapes(ToSheet.Shapes.Count)
+                        If Err.Number = 0 Then
+                            newShape.Top = ToSheet.Range(sh.TopLeftCell.Address).Top
+                            If Err.Number = 0 Then
+                                newShape.Left = ToSheet.Range(sh.TopLeftCell.Address).Left
+                                If Err.Number = 0 Then
+                                    newShape.SetShapesDefaultProperties
+                                    If Err.Number = 0 Then
+                                        copySuccess = True
+                                    End If
+                                End If
+                            End If
+                        End If
+                    End If
+                    
+                    If Not copySuccess Then
+                        copyRetry = copyRetry + 1
+                        DoEvents
+                        Application.CutCopyMode = False
+                    End If
+                Loop
+                
                 On Error GoTo 0
             End If
         End If
@@ -263,9 +292,6 @@ Cleanup:
     Application.DisplayAlerts = alertState
     Application.ScreenUpdating = screenState
     Exit Function
-    
-recopy:
-    DoEvents: Resume
 End Function
 
 ' === 既存のインターフェースを維持 ===
