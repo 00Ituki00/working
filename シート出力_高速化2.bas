@@ -153,6 +153,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     ' === Step 9: 書式をPasteSpecialで一括適用 ===
     On Error Resume Next
     FromRange.Copy
+    ToSheet.Activate
     ToRange.PasteSpecial Paste:=xlPasteFormats
     Application.CutCopyMode = False
     On Error GoTo 0
@@ -176,12 +177,14 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     書式を正規化 ToRange
     On Error GoTo 0
     
-    ' === Step 12: 図形をコピー（Activateなし） ===
+    ' === Step 12: 図形をコピー ===
     On Error Resume Next
     ToSheet.Activate
+    
     For Each sh In fromsheet.Shapes
         If Not Intersect(Range(sh.TopLeftCell, sh.BottomRightCell), FromRange) Is Nothing Then
             If sh.Type = msoChart Or sh.Type = 17 Or sh.Type = 13 Then
+                On Error GoTo recopy
                 Application.CutCopyMode = False
                 sh.Copy
                 ToSheet.PasteSpecial Format:=0
@@ -191,6 +194,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
                 newShape.Top = ToSheet.Range(sh.TopLeftCell.Address).Top
                 newShape.Left = ToSheet.Range(sh.TopLeftCell.Address).Left
                 newShape.SetShapesDefaultProperties
+                On Error GoTo 0
             End If
         End If
         If ToSheet.Shapes.Count > 0 Then 図形スナップ ToSheet.Shapes(ToSheet.Shapes.Count)
@@ -261,6 +265,9 @@ Cleanup:
     Application.DisplayAlerts = alertState
     Application.ScreenUpdating = screenState
     Exit Function
+    
+recopy:
+    DoEvents: Resume
 End Function
 
 ' === 既存のインターフェースを維持 ===
