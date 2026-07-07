@@ -177,47 +177,26 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     書式を正規化 ToRange
     On Error GoTo 0
     
-    ' === Step 12: 図形を一括コピー（ShapeRange使用） ===
+    ' === Step 12: 図形をコピー ===
     On Error Resume Next
     ToSheet.Activate
-    
-    ' 範囲内の対象図形を収集
-    Dim shpNames() As String
-    Dim shpCount As Long
-    shpCount = 0
-    
+    Dim newShape As Shape
     For Each sh In fromsheet.Shapes
         If Not Intersect(Range(sh.TopLeftCell, sh.BottomRightCell), FromRange) Is Nothing Then
             If sh.Type = msoChart Or sh.Type = 17 Or sh.Type = 13 Then
-                shpCount = shpCount + 1
-                ReDim Preserve shpNames(1 To shpCount)
-                shpNames(shpCount) = sh.Name
+                On Error GoTo recopy
+                Application.CutCopyMode = False
+                sh.Copy
+                ToSheet.PasteSpecial Format:=0
+                Set newShape = ToSheet.Shapes(ToSheet.Shapes.Count)
+                newShape.Top = ToSheet.Range(sh.TopLeftCell.Address).Top
+                newShape.Left = ToSheet.Range(sh.TopLeftCell.Address).Left
+                newShape.SetShapesDefaultProperties
+                On Error GoTo 0
             End If
         End If
+        If ToSheet.Shapes.Count > 0 Then 図形スナップ ToSheet.Shapes(ToSheet.Shapes.Count)
     Next sh
-    
-    ' ShapeRangeで一括コピー
-    If shpCount > 0 Then
-        Dim shpRange As ShapeRange
-        Set shpRange = fromsheet.Shapes.Range(shpNames)
-        
-        Application.CutCopyMode = False
-        shpRange.Copy
-        ToSheet.PasteSpecial Format:=0
-        Application.CutCopyMode = False
-        
-        ' 位置調整（元の図形と同じ位置に）
-        Dim j As Long
-        For j = 1 To shpCount
-            Dim origShape As Shape
-            Dim pastedShape As Shape
-            Set origShape = fromsheet.Shapes(shpNames(j))
-            Set pastedShape = ToSheet.Shapes(ToSheet.Shapes.Count - shpCount + j)
-            pastedShape.Top = ToSheet.Range(origShape.TopLeftCell.Address).Top
-            pastedShape.Left = ToSheet.Range(origShape.TopLeftCell.Address).Left
-            pastedShape.SetShapesDefaultProperties
-        Next j
-    End If
     On Error GoTo 0
     
     ' === Step 13: ウィンドウ設定のコピー ===
@@ -284,6 +263,9 @@ Cleanup:
     Application.DisplayAlerts = alertState
     Application.ScreenUpdating = screenState
     Exit Function
+    
+recopy:
+    DoEvents: Resume
 End Function
 
 ' === 既存のインターフェースを維持 ===
