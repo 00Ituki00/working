@@ -150,18 +150,11 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
         ToSheet.Columns(FromRange.Column + c - 1).ColumnWidth = colWidths(c)
     Next c
     
-    ' === Step 9: ピボットテーブル以外の範囲に書式を適用 ===
+    ' === Step 9: 書式をPasteSpecialで一括適用 ===
     On Error Resume Next
-    Dim nonPtRange As Range
-    Set nonPtRange = RangeSubtract(FromRange, ptRanges)
-    
-    If Not nonPtRange Is Nothing Then
-        nonPtRange.Copy
-        Dim nonPtToRange As Range
-        Set nonPtToRange = ToSheet.Range(nonPtRange.Address)
-        nonPtToRange.PasteSpecial Paste:=xlPasteFormats
-        Application.CutCopyMode = False
-    End If
+    FromRange.Copy
+    ToRange.PasteSpecial Paste:=xlPasteFormats
+    Application.CutCopyMode = False
     On Error GoTo 0
     
     ' === Step 10: ピボットテーブル範囲を上書き ===
@@ -185,6 +178,7 @@ Public Function 切り出し高速(FromBook As Workbook, fromsheet As Worksheet,
     
     ' === Step 12: 図形をコピー（Activateなし） ===
     On Error Resume Next
+    ToSheet.Activate
     For Each sh In fromsheet.Shapes
         If Not Intersect(Range(sh.TopLeftCell, sh.BottomRightCell), FromRange) Is Nothing Then
             If sh.Type = msoChart Or sh.Type = 17 Or sh.Type = 13 Then
