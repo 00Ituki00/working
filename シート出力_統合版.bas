@@ -275,7 +275,7 @@ Sub 切り出し_定義(T As Variant, Optional itemname = "", Optional fitpage =
     Dim FromBook As Workbook, ToBook As Workbook
     Dim fromsheet As Worksheet, ToSheet As Worksheet
     Dim FromRange As Range
-    Dim comm As String, topath As String, toBookName As String, toSheetName As String
+    Dim comm, topath As String, toBookName As String, toSheetName As String
     Dim selectiononly As Boolean
     Dim p As Long, q As Long, vn As String
     
