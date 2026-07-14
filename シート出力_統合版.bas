@@ -139,9 +139,9 @@ Public Function 切り出し(FromBook As Workbook, fromsheet As Worksheet, FromR
     Dim copySuccess As Boolean
     Dim shapesToCopy As New Collection
     
-    ' コピー対象図形を事前収集
+    ' コピー対象図形を事前収集（左上セルがFromRange内にあるもののみ）
     For Each sh In fromsheet.Shapes
-        If Not Intersect(Range(sh.TopLeftCell, sh.BottomRightCell), FromRange) Is Nothing Then
+        If Not Intersect(sh.TopLeftCell, FromRange) Is Nothing Then
             If sh.Type = msoChart Or sh.Type = 17 Or sh.Type = 13 Then
                 shapesToCopy.Add sh
             End If
@@ -212,6 +212,21 @@ Public Function 切り出し(FromBook As Workbook, fromsheet As Worksheet, FromR
         ToSheet.Range(FromRange.Rows(FromRange.Rows.Count + 1).Address, ToSheet.Rows(99999).Address).Delete '下
         If FromRange.Cells(1, 1).Column - 1 > 0 Then ToSheet.Range(ToSheet.Columns(1), ToSheet.Columns(FromRange.Cells(1, 1).Column - 1)).Delete '左
         If FromRange.Cells(1, 1).Row - 1 > 0 Then ToSheet.Range(ToSheet.Rows(1), ToSheet.Rows(FromRange.Cells(1, 1).Row - 1)).Delete '上
+        
+        ' 範囲外の図形も削除
+        On Error Resume Next
+        Dim chkShape As Shape
+        Dim delShapes As New Collection
+        For Each chkShape In ToSheet.Shapes
+            If Intersect(chkShape.TopLeftCell, ToRange) Is Nothing Then
+                delShapes.Add chkShape
+            End If
+        Next chkShape
+        Dim delShp As Variant
+        For Each delShp In delShapes
+            delShp.Delete
+        Next delShp
+        On Error GoTo 0
     End If
     
     ToSheet.Cells(1, 1).Select
