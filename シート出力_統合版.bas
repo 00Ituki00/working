@@ -8,12 +8,12 @@ Global pendingBooks As Object ' 遅延保存用ブック管理
 Public Sub 切り出し_定義とスライサー_シート内_call2(): 切り出し_定義とスライサー_シート内 ("output時間外集計16_残業手当推移グラフ"): End Sub
 Public Sub 切り出し_定義_シート内_call2(): 切り出し_定義_シート内 ("output時間外集計16_残業手当推移グラフ"): End Sub
 
-' === 初期化 ===
+' === 遅延保存用：初期化 ===
 Private Sub InitPendingBooks()
     Set pendingBooks = CreateObject("Scripting.Dictionary")
 End Sub
 
-' === 一括保存実行 ===
+' === 遅延保存用：一括保存実行 ===
 Sub SavePendingBooks()
     If pendingBooks Is Nothing Then Exit Sub
     
@@ -32,52 +32,29 @@ Sub SavePendingBooks()
 End Sub
 
 Public Function 切り出し(FromBook As Workbook, fromsheet As Worksheet, FromRange As Range, ToBook As Workbook, ToSheet As Worksheet, Optional selectiononly = False, Optional fitpage = False) As Workbook
-'対象の範囲を対象のシートに再現出力（高速化版）
+'対象の範囲を対象のシートに再現出力
     Dim pt As PivotTable
-    Dim sh As Shape
+    Dim ptRange As Range
+    Dim ptRanges As Collection
+    Dim cell As Range
     Dim dataArr As Variant
     Dim numFmtArr As Variant
     Dim colWidths() As Double
     Dim r As Long, c As Long
     
-    ' === Step 0: FromRangeをUsedRangeで絞る ===
-    Dim usedRng As Range
-    Set usedRng = fromsheet.UsedRange
-    If Not Intersect(FromRange, usedRng) Is Nothing Then
-        Set FromRange = Intersect(FromRange, usedRng)
-    End If
-    If FromRange Is Nothing Then
-        Set 切り出し = ToBook
-        Exit Function
-    End If
-    
-    ' テーマ適用
+    STVBA
     ToBook.ApplyTheme ("C:\Users\h_ikegami\AppData\Roaming\Microsoft\Templates\Document Themes\default.thmx")
+    DoEvents
+
+    Dim firstRow As Long, lastRow As Long
+    firstRow = FromRange.Row
+    lastRow = FromRange.Row + FromRange.Rows.Count - 1
     
-    ' === Step 1: ピボットテーブル範囲を保存 ===
-    Dim ptRanges As New Collection
-    On Error Resume Next
-    For Each pt In fromsheet.PivotTables
-        If Not Intersect(pt.TableRange2, FromRange) Is Nothing Then
-            Dim ptRange As Range
-            If pt.ShowValuesRow Then
-                Set ptRange = Intersect(pt.TableRange1.Offset(1, 0).Resize(pt.TableRange1.Rows.Count - 1), FromRange)
-            Else
-                Set ptRange = Intersect(pt.TableRange1, FromRange)
-            End If
-            If Not ptRange Is Nothing Then ptRanges.Add ptRange
-            If pt.PageFields.Count > 0 Then
-                Dim ptPageRange As Range
-                Set ptPageRange = Intersect(pt.PageRange, FromRange)
-                If Not ptPageRange Is Nothing Then ptRanges.Add ptPageRange
-            End If
-        End If
-    Next pt
-    On Error GoTo 0
+    ToSheet.Cells.EntireRow.AutoFit
+    DoEvents
     
-    ' === Step 2: データを配列で一括取得 ===
+    ' === 高速化：データを配列で一括コピー ===
     dataArr = FromRange.Value2
-    
     ' エラーのみクリア（Emptyはそのまま）
     For r = 1 To UBound(dataArr, 1)
         For c = 1 To UBound(dataArr, 2)
@@ -85,67 +62,79 @@ Public Function 切り出し(FromBook As Workbook, fromsheet As Worksheet, FromR
         Next c
     Next r
     
-    ' === Step 3: NumberFormat・列幅を配列で一括取得 ===
+    ' NumberFormat・列幅を配列で一括取得
     numFmtArr = FromRange.NumberFormat
     ReDim colWidths(1 To FromRange.Columns.Count)
     For c = 1 To FromRange.Columns.Count
         colWidths(c) = fromsheet.Columns(FromRange.Column + c - 1).ColumnWidth
     Next c
     
-    ' === Step 4: 一括書き込み ===
+    ' 一括書き込み
     Dim ToRange As Range
     Set ToRange = ToSheet.Range( _
         ToSheet.Cells(FromRange.Row, FromRange.Column), _
         ToSheet.Cells(FromRange.Row + FromRange.Rows.Count - 1, _
                       FromRange.Column + FromRange.Columns.Count - 1) _
     )
-    
     ToRange.NumberFormat = "@"
     ToRange.Value2 = dataArr
     ToRange.NumberFormat = numFmtArr
-    
     ' 列幅一括適用
     For c = 1 To UBound(colWidths)
         ToSheet.Columns(FromRange.Column + c - 1).ColumnWidth = colWidths(c)
     Next c
+    DoEvents
     
-    ' === Step 5: 書式をPasteSpecialで一括適用 ===
+    ' 書式をPasteSpecialで一括適用
     On Error GoTo recopy1
     fromsheet.Activate: FromRange.Copy: ToSheet.Activate
     ToRange.PasteSpecial Paste:=xlPasteFormats
     On Error GoTo 0
+    DoEvents
     
-    ' === Step 6: 条件書式を正規化 ===
+    '条件書式を実書式へ反映
     書式を正規化 ToRange
+    DoEvents
     
-    ' === Step 7: ピボットテーブル範囲を上書き ===
-    On Error Resume Next
-    Dim ptItem As Range
-    For Each ptItem In ptRanges
-        Dim ptIntersect As Range
-        Set ptIntersect = Intersect(ptItem, FromRange)
-        If Not ptIntersect Is Nothing Then
-            ptIntersect.Copy
-            ToSheet.Cells(ptIntersect.Cells(1, 1).Row, ptIntersect.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteValuesAndNumberFormats
-            ToSheet.Cells(ptIntersect.Cells(1, 1).Row, ptIntersect.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteFormats
-            Application.CutCopyMode = False
+    ' ピボットテーブルの再現
+    Set ptRanges = New Collection
+    For Each pt In fromsheet.PivotTables
+    If Not Intersect(pt.TableRange2, FromRange) Is Nothing Then
+         'ピボットテーブルの列フィルタ（1行目）を除く
+        If pt.ShowValuesRow = True Then
+            Set ptRange = pt.TableRange1.Offset(1, 0).Resize(pt.TableRange1.Rows.Count - 1)
+        Else
+            Set ptRange = pt.TableRange1 '全体を含めると書式コピーできない
         End If
-    Next ptItem
-    On Error GoTo 0
+        ' 値と書式をコピー
+        ptRange.Copy
+        ToSheet.Cells(ptRange.Cells(1, 1).Row, ptRange.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteValuesAndNumberFormats
+        ToSheet.Cells(ptRange.Cells(1, 1).Row, ptRange.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteFormats
+        If pt.PageFields.Count > 0 Then 'フィルター行がある場合はコピー
+            pt.PageRange.Copy
+            ToSheet.Cells(pt.PageRange.Cells(1, 1).Row, pt.PageRange.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteValuesAndNumberFormats
+            ToSheet.Cells(pt.PageRange.Cells(1, 1).Row, pt.PageRange.Cells(1, 1).Column).PasteSpecial Paste:=xlPasteFormats
+        End If
+        End If
+    Next pt
+    DoEvents
     
-    ' === Step 8: ウィンドウ設定のコピー ===
-    On Error Resume Next
+    If fitpage = True Then 不要な行を非表示
+    
+    'シートのズームと固定をコピー
+    ToSheet.Activate
     ToSheet.Cells(1).Select
     ToSheet.Parent.Windows(1).Zoom = fromsheet.Parent.Windows(1).Zoom
-    If fromsheet.Parent.Windows(1).FreezePanes Then
+    fromsheet.Activate
+    If fromsheet.Parent.Windows(1).FreezePanes = True Then
+        ToSheet.Activate
         ToSheet.Parent.Windows(1).SplitVertical = fromsheet.Parent.Windows(1).SplitVertical
         ToSheet.Parent.Windows(1).SplitHorizontal = fromsheet.Parent.Windows(1).SplitHorizontal
         ToSheet.Application.ActiveWindow.FreezePanes = True
     End If
-    On Error GoTo 0
     
-    ' === Step 9: 図形をコピー ===
-    On Error Resume Next
+    'シート内の画像をコピー
+    Dim sh As Shape
     Dim copyRetry As Integer
     Dim copySuccess As Boolean
     Dim shapesToCopy As New Collection
@@ -167,9 +156,11 @@ Public Function 切り出し(FromBook As Workbook, fromsheet As Worksheet, FromR
         Do While copyRetry < 3 And Not copySuccess
             On Error Resume Next
             Err.Clear
+            Application.CutCopyMode = False
             ' Copy直後にDoEvents（クリップボード反映待ち）
             shp.Copy
             DoEvents
+            ToSheet.Activate
             ToSheet.PasteSpecial Format:=0
             ' Paste直後にDoEvents（図形配置反映待ち）
             DoEvents
@@ -178,12 +169,12 @@ Public Function 切り出し(FromBook As Workbook, fromsheet As Worksheet, FromR
                 Set newShape = ToSheet.Shapes(ToSheet.Shapes.Count)
                 newShape.Top = ToSheet.Range(shp.TopLeftCell.Address).Top
                 newShape.Left = ToSheet.Range(shp.TopLeftCell.Address).Left
+                If newShape.TopLeftCell.Address <> shp.TopLeftCell.Address Then Stop
                 newShape.SetShapesDefaultProperties
                 copySuccess = True
             End If
             If Not copySuccess Then
                 copyRetry = copyRetry + 1
-                Application.CutCopyMode = False
                 ' エラー時のみDoEvents（クリップボード回復待ち）
                 If copyRetry < 3 Then DoEvents
             End If
@@ -191,14 +182,18 @@ Public Function 切り出し(FromBook As Workbook, fromsheet As Worksheet, FromR
         If ToSheet.Shapes.Count > 0 Then 図形スナップ ToSheet.Shapes(ToSheet.Shapes.Count)
     Next shp
     On Error GoTo 0
-    
-    ' === Step 10: 名前定義をコピー ===
+
+    '名前定義をコピー
     On Error Resume Next
-    Dim n As Name, nr As Range, ton As Name
+    Dim nr As Range
+    Dim n As Name, ton As Name
+    
     For Each n In FromBook.Names
         If n.Visible Then
             Set nr = Nothing
+            On Error Resume Next
             Set nr = n.RefersToRange
+    
             If Not nr Is Nothing Then
                 If nr.Worksheet Is fromsheet Then
                     If selectiononly = False Or Not Intersect(nr, FromRange) Is Nothing Then
@@ -208,32 +203,21 @@ Public Function 切り出し(FromBook As Workbook, fromsheet As Worksheet, FromR
                 End If
             End If
         End If
-    Next n
-    On Error GoTo 0
+    Next
+    DoEvents
     
-    ' === Step 11: 選択範囲外の削除 ===
-    On Error Resume Next
+    '選択範囲外のセルを削除
     If selectiononly Then
-        If FromRange.Column + FromRange.Columns.Count <= ToSheet.Columns.Count Then
-            ToSheet.Range(ToSheet.Cells(1, FromRange.Column + FromRange.Columns.Count), _
-                         ToSheet.Cells(1, ToSheet.Columns.Count)).EntireColumn.Delete
-        End If
-        If FromRange.Row + FromRange.Rows.Count <= ToSheet.Rows.Count Then
-            ToSheet.Range(ToSheet.Cells(FromRange.Row + FromRange.Rows.Count, 1), _
-                         ToSheet.Cells(ToSheet.Rows.Count, 1)).EntireRow.Delete
-        End If
-        If FromRange.Cells(1, 1).Column > 1 Then
-            ToSheet.Range(ToSheet.Columns(1), ToSheet.Columns(FromRange.Cells(1, 1).Column - 1)).Delete
-        End If
-        If FromRange.Cells(1, 1).Row > 1 Then
-            ToSheet.Range(ToSheet.Rows(1), ToSheet.Rows(FromRange.Cells(1, 1).Row - 1)).Delete
-        End If
+        ToSheet.Range(FromRange.Columns(FromRange.Columns.Count + 1).Address, ToSheet.Columns(99999).Address).Delete '右
+        ToSheet.Range(FromRange.Rows(FromRange.Rows.Count + 1).Address, ToSheet.Rows(99999).Address).Delete '下
+        If FromRange.Cells(1, 1).Column - 1 > 0 Then ToSheet.Range(ToSheet.Columns(1), ToSheet.Columns(FromRange.Cells(1, 1).Column - 1)).Delete '左
+        If FromRange.Cells(1, 1).Row - 1 > 0 Then ToSheet.Range(ToSheet.Rows(1), ToSheet.Rows(FromRange.Cells(1, 1).Row - 1)).Delete '上
     End If
-    On Error GoTo 0
     
     ToSheet.Cells(1, 1).Select
     ToBook.Sheets(1).Activate
     maked.Add ToBook
+    RFVBA
     Set 切り出し = ToBook
     Exit Function
 
@@ -280,6 +264,7 @@ Sub 切り出し_定義(T As Variant, Optional itemname = "", Optional fitpage =
     Dim selectiononly As Boolean
     Dim p As Long, q As Long, vn As String
     
+    STVBA
     Set FromBook = T.RefersToRange.Parent.Parent
     FromBook.Activate
     comm = T.Comment
@@ -306,15 +291,14 @@ reg:
      If InStr(comm, "M-1月") > 0 Then comm = Replace(comm, "M-1月", Month(Date) - 1 & "月")
      If InStr(comm, "M月") > 0 Then comm = Replace(comm, "M月", Month(Date) & "月")
    
-     Dim commArr() As String
-     commArr = Split(comm, ",")
-     topath = FromBook.path & "\" & commArr(0): If Right(topath, 1) <> "\" Then topath = topath & "\"     'コメントから設定 AddPathは連続切り出し用
-     toBookName = commArr(1): If InStr(toBookName, ".xlsx") = 0 Then toBookName = toBookName & ".xlsx"
-     toSheetName = commArr(2)
+     comm = Split(comm, ",")
+     topath = FromBook.path & "\" & comm(0): If Right(topath, 1) <> "\" Then topath = topath & "\"     'コメントから設定 AddPathは連続切り出し用
+     toBookName = comm(1): If InStr(toBookName, ".xlsx") = 0 Then toBookName = toBookName & ".xlsx"
+     toSheetName = comm(2)
     
      selectiononly = True
-     If UBound(commArr) >= 3 Then If commArr(3) = "false" Then selectiononly = False
-     
+     If UBound(comm) >= 3 Then If comm(3) = "false" Then selectiononly = False
+
      If InStr(toBookName, "itemname") > 0 Then toBookName = Replace(toBookName, "itemname", itemname) '可変ファイル名
      
      ' === 遅延保存：既存のブックを再利用 ===
@@ -328,13 +312,11 @@ reg:
      End If
      
      If ToBook Is Nothing Then
-         ' 既存ブックを検索
+         'すでに同名ブックを開いていれば取得、無ければ新規
          For Each book In Workbooks
              If book.Name = toBookName Then Set ToBook = Workbooks(toBookName): Exit For
          Next
-         If ToBook Is Nothing Then
-             Set ToBook = Workbooks.Add
-         End If
+         If ToBook Is Nothing Then Set ToBook = Workbooks.Add
          If Not pendingBooks Is Nothing Then
              pendingBooks.Add bookKey, ToBook
          End If
@@ -353,10 +335,12 @@ reg:
 
     ' === 保存制御 ===
     If Not skipSave Then
+        STVBA
         On Error Resume Next
         If Not ToBook.Sheets("Sheet1") Is Nothing Then ToBook.Sheets("Sheet1").Delete
         On Error GoTo 0
-        ToBook.SaveAs bookKey
+        ToBook.SaveAs topath & toBookName
+        RFVBA
         Sleep (2000)
         FromBook.Activate
     End If
@@ -394,20 +378,19 @@ Sub 切り出し_定義_シート内(Optional teigifilter = "output", Optional f
             DoEvents
         End If
         End If
-        
     Next
     RFVBA
     ResetMaked
 End Sub
 
-' === 切り出し_定義とスライサー（旧版：互換性維持）===
+' === 旧版：互換性維持 ===
 Public Sub 切り出し_定義とスライサー_call(): 切り出し_定義とスライサー: End Sub
 Sub 切り出し_定義とスライサー(Optional teigifilter = "output", Optional fitpage = False)
     Dim ActiveItems As Collection
     Set ActiveItems = New Collection
     Set sourcebook = ActiveWorkbook
     Set sli = GetSlicer(Selection.Name)
-     For Each Item In sli.SlicerCacheLevels(1).SlicerItems
+    For Each Item In sli.SlicerCacheLevels(1).SlicerItems
         If Item.Selected = True And Item.HasData = True Then ActiveItems.Add Item
     Next
     For Each Item In ActiveItems
@@ -429,7 +412,7 @@ Sub 切り出し_定義とスライサー_シート内(Optional teigifilter = "o
     Set ActiveItems = New Collection
     Set sourcebook = ActiveWorkbook
     Set sli = GetSlicer(Selection.Name)
-     For Each Item In sli.SlicerCacheLevels(1).SlicerItems
+    For Each Item In sli.SlicerCacheLevels(1).SlicerItems
         If Item.Selected = True And Item.HasData = True Then ActiveItems.Add Item
     Next
     For Each Item In ActiveItems
@@ -439,13 +422,13 @@ Sub 切り出し_定義とスライサー_シート内(Optional teigifilter = "o
             sli.VisibleSlicerItemsList = Array(Item.Name)
             Application.Calculate
             切り出し_定義_シート内 teigifilter, fitpage
-     End If
+        End If
     Next
     ResetMaked
     Application.StatusBar = ""
 End Sub
 
-' === 切り出し_定義とスライサー_一括版（高速化：スライサー項目単位で一括保存）===
+' === 高速化版：スライサー項目単位で一括保存 ===
 Public Sub 切り出し_定義とスライサー_一括(Optional teigifilter = "output", Optional fitpage = False)
     Dim ActiveItems As New Collection
     Dim sourcebook As Workbook
@@ -648,7 +631,6 @@ End Sub
 Sub DirectCall()
     DirectCaller.Show False
 End Sub
-
 
 Sub 条件書式の正規化()
    書式を正規化 Selection
