@@ -31,6 +31,41 @@ Sub SavePendingBooks()
     Set pendingBooks = Nothing
 End Sub
 
+' === 遅延保存用：指定アイテムに紐づくブックを保存・解放 ===
+' スライサー項目が多い場合のメモリ不足対策。
+' itemNameを含むbookKeyのブックを保存・クローズし、pendingBooksから削除する。
+' 共有ブック（itemNameを含まないbookKey）は残存させ、後続処理で再利用。
+Sub SavePendingBooksByItem(itemName As String)
+    If pendingBooks Is Nothing Then Exit Sub
+    If pendingBooks.Count = 0 Then Exit Sub
+    
+    Dim key As Variant
+    Dim wb As Workbook
+    Dim keysToSave() As String
+    Dim saveCount As Long: saveCount = 0
+    
+    ' 保存対象キーを収集（itemNameを含むキーのみ）
+    For Each key In pendingBooks.Keys
+        If InStr(CStr(key), CStr(itemName)) > 0 Then
+            ReDim Preserve keysToSave(saveCount)
+            keysToSave(saveCount) = CStr(key)
+            saveCount = saveCount + 1
+        End If
+    Next key
+    
+    ' 対象ブックを保存・クローズ
+    Dim i As Long
+    For i = 0 To saveCount - 1
+        Set wb = pendingBooks(keysToSave(i))
+        On Error Resume Next
+        If Not wb.Sheets("Sheet1") Is Nothing Then wb.Sheets("Sheet1").Delete
+        On Error GoTo 0
+        wb.SaveAs keysToSave(i)
+        wb.Close
+        pendingBooks.Remove keysToSave(i)
+    Next i
+End Sub
+
 Public Function 切り出し(FromBook As Workbook, fromsheet As Worksheet, FromRange As Range, ToBook As Workbook, ToSheet As Worksheet, Optional selectiononly = False, Optional fitpage = False) As Workbook
 '対象の範囲を対象のシートに再現出力
     Dim pt As PivotTable
@@ -489,10 +524,13 @@ Public Sub 切り出し_定義とスライサー_一括(Optional teigifilter = "
                     切り出し_定義 T, Item.Caption, fitpage, True ' skipSave=True
                 End If
             Next
+            
+            ' === メモリ対策：現在のアイテムに紐づくブックを保存・解放 ===
+            SavePendingBooksByItem Item.Caption
         End If
     Next
     
-    ' 全ブックを一括保存
+    ' 全ブックを一括保存（共有ブック等の残存分）
     SavePendingBooks
     
     Application.Calculation = calcState
@@ -553,10 +591,13 @@ Public Sub 切り出し_定義とスライサー_シート内_一括(Optional te
                     End If
                 End If
             Next
+            
+            ' === メモリ対策：現在のアイテムに紐づくブックを保存・解放 ===
+            SavePendingBooksByItem Item.Caption
         End If
     Next
     
-    ' 全ブックを一括保存
+    ' 全ブックを一括保存（共有ブック等の残存分）
     SavePendingBooks
     
     Application.Calculation = calcState
