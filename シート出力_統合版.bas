@@ -264,6 +264,7 @@ Public Function 切り出し(FromBook As Workbook, fromsheet As Worksheet, FromR
         On Error GoTo 0
     End If
     
+    ToSheet.Activate
     ToSheet.Cells(1, 1).Select
     ToBook.Sheets(1).Activate
     maked.Add ToBook
