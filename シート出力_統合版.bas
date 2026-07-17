@@ -444,13 +444,14 @@ Sub 切り出し_定義とスライサー(Optional teigifilter = "output", Optio
         If Item.Selected = True And Item.HasData = True Then ActiveItems.Add Item
     Next
     For Each Item In ActiveItems
-        If Item.HasData <> True Or Item.Caption = "(空白)" Or Item.Caption = "-" Or Item.Caption = "" Then: Exit For
+        If Item.HasData <> True Or Item.Caption = "(空白)" Or Item.Caption = "-" Or Item.Caption = "" Then GoTo NextItem1
         If Item.Caption <> "テスト" Then
             Application.StatusBar = (Item.Caption & " 処理中...")
             sli.VisibleSlicerItemsList = Array(Item.Name)
             Application.Calculate
             切り出し_定義_全体 teigifilter, fitpage
         End If
+NextItem1:
     Next
     ResetMaked
     Application.StatusBar = ""
@@ -466,13 +467,14 @@ Sub 切り出し_定義とスライサー_シート内(Optional teigifilter = "o
         If Item.Selected = True And Item.HasData = True Then ActiveItems.Add Item
     Next
     For Each Item In ActiveItems
-        If Item.HasData <> True Or Item.Caption = "(空白)" Or Item.Caption = "-" Or Item.Caption = "" Then: Exit For
+        If Item.HasData <> True Or Item.Caption = "(空白)" Or Item.Caption = "-" Or Item.Caption = "" Then GoTo NextItem2
         If Item.Caption <> "テスト" Then
             Application.StatusBar = (Item.Caption & " 処理中...")
             sli.VisibleSlicerItemsList = Array(Item.Name)
             Application.Calculate
             切り出し_定義_シート内 teigifilter, fitpage
         End If
+NextItem2:
     Next
     ResetMaked
     Application.StatusBar = ""
@@ -511,7 +513,7 @@ Public Sub 切り出し_定義とスライサー_一括(Optional teigifilter = "
     Application.ScreenUpdating = False
     
     For Each Item In ActiveItems
-        If Item.HasData <> True Or Item.Caption = "(空白)" Or Item.Caption = "-" Or Item.Caption = "" Then Exit For
+        If Item.HasData <> True Or Item.Caption = "(空白)" Or Item.Caption = "-" Or Item.Caption = "" Then GoTo NextItem3
         If Item.Caption <> "テスト" Then
             Application.StatusBar = Item.Caption & " 処理中..."
             sli.VisibleSlicerItemsList = Array(Item.Name)
@@ -528,6 +530,7 @@ Public Sub 切り出し_定義とスライサー_一括(Optional teigifilter = "
             ' === メモリ対策：現在のアイテムに紐づくブックを保存・解放 ===
             SavePendingBooksByItem Item.Caption
         End If
+NextItem3:
     Next
     
     ' 全ブックを一括保存（共有ブック等の残存分）
@@ -576,7 +579,7 @@ Public Sub 切り出し_定義とスライサー_シート内_一括(Optional te
     Application.ScreenUpdating = False
     
     For Each Item In ActiveItems
-        If Item.HasData <> True Or Item.Caption = "(空白)" Or Item.Caption = "-" Or Item.Caption = "" Then Exit For
+        If Item.HasData <> True Or Item.Caption = "(空白)" Or Item.Caption = "-" Or Item.Caption = "" Then GoTo NextItem4
         If Item.Caption <> "テスト" Then
             Application.StatusBar = Item.Caption & " 処理中..."
             sli.VisibleSlicerItemsList = Array(Item.Name)
@@ -595,6 +598,7 @@ Public Sub 切り出し_定義とスライサー_シート内_一括(Optional te
             ' === メモリ対策：現在のアイテムに紐づくブックを保存・解放 ===
             SavePendingBooksByItem Item.Caption
         End If
+NextItem4:
     Next
     
     ' 全ブックを一括保存（共有ブック等の残存分）
