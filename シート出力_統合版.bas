@@ -434,7 +434,7 @@ Sub 切り出し_定義_シート内(Optional teigifilter = "output", Optional f
 End Sub
 
 ' === 旧版：互換性維持 ===
-Public Sub 切り出し_定義とスライサー_call(): 切り出し_定義とスライサー: End Sub
+Public Sub 切り出し_定義とスライサー_call(): 切り出し_定義とスライサー_一括: End Sub
 Sub 切り出し_定義とスライサー(Optional teigifilter = "output", Optional fitpage = False)
     Dim ActiveItems As Collection
     Set ActiveItems = New Collection
@@ -457,7 +457,7 @@ NextItem1:
     Application.StatusBar = ""
 End Sub
 
-Public Sub 切り出し_定義とスライサー_シート内_call(): 切り出し_定義とスライサー_シート内: End Sub
+Public Sub 切り出し_定義とスライサー_シート内_call(): 切り出し_定義とスライサー_シート内_一括: End Sub
 Sub 切り出し_定義とスライサー_シート内(Optional teigifilter = "output", Optional fitpage = False)
     Dim ActiveItems As Collection
     Set ActiveItems = New Collection
